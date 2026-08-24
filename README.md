@@ -8,7 +8,7 @@
 
 ## Atlas
 
-## Integrantes: <a href="https://github.com/rafafmorais">Rafaela Florêncio Morais</a> <a href="https://github.com/juliaa-pg">Julia Pereira Godinho</a> e <a href="https://github.com/Mariana851">Mariana Almeida Nascimento</a> 
+## Integrantes: <a href="https://github.com/rafafmorais">Rafaela Florêncio Morais</a>, <a href="https://github.com/juliaa-pg">Julia Pereira Godinho</a> e <a href="https://github.com/Mariana851">Mariana Almeida Nascimento</a> 
 
 ## Professores Orientadores: <a href="https://www.linkedin.com/in/eduardo-savino/">Eduardo Savino Gomes</a>, <a href="https://www.linkedin.com/in/luisspires/">Luis Pires</a>, <a href="https://www.linkedin.com/in/mauricio-lopes-42b8b33a3/">Mauricio Lopes</a> e <a href="https://www.linkedin.com/in/professorrodnil/">Rodnil da Silva Moreira Lisboa</a>
 
@@ -20,11 +20,9 @@
 </p>
 
 
-De um a dois parágrafos sobre o que é seu projeto e o que ele faz.
-<br><br>
-Meu projeto ajuda estudantes FECAP a configurarem seus githubs.
-<br><br>
-May the force be with you!
+O projeto consiste no desenvolvimento de uma Plataforma Analítica de Planejamento Financeiro, criada para transformar dados financeiros brutos em informações úteis para a tomada de decisões. A solução realiza a coleta, preparação, integração e análise dos dados, permitindo identificar padrões, comparar períodos e acompanhar indicadores financeiros e operacionais.
+
+A plataforma também disponibiliza relatórios gerenciais e um dashboard interativo, com no mínimo cinco indicadores, filtros e visualizações. Dessa forma, os usuários podem acompanhar KPIs, analisar relações entre variáveis, avaliar cenários e realizar análises de sensibilidade, apoiando decisões estratégicas e operacionais com base nos dados.
 <br><br>
 
 ## 🛠 Estrutura de pastas
