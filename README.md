@@ -16,7 +16,6 @@
 
 <p align="center">
 <img src="../Projeto1/imagens/cti logo.png" alt="CTI Analytics" border="0">
-  Atlas</a> 
 </p>
 
 
