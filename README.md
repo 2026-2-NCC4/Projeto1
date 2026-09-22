@@ -15,8 +15,8 @@
 ## Descrição
 
 <p align="center">
-<img src="https://pix4free.org/assets/library/2021-01-20/originals/game.jpg" alt="NOME DO JOGO" border="0">
-  Atlas Group</a> 
+<img src="../Projeto1/imagens/cti logo.png" alt="CTI Analytics" border="0">
+  Atlas</a> 
 </p>
 
 
