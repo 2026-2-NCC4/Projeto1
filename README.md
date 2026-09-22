@@ -15,7 +15,7 @@
 ## Descrição
 
 <p align="center">
-<img src="../Projeto1/imagens/ctilogo.png" alt="CTI Analytics" border="0">
+  <img src="imagens/ctilogo.png" alt="CTI Analytics" width="500">
 </p>
 
 
