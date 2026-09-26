@@ -28,60 +28,76 @@ A plataforma também disponibiliza relatórios gerenciais e um dashboard interat
 
 <pre>
 │
+├── data
+│   ├── raw                      # base original (Demonstrativo Fecap v3.csv)
+│   └── staging                  # bases normalizadas e resumo estatístico
+│
+├── documentos
+│   └── entrega 1
+│       ├── análise inferencial de dados
+│       ├── contabilidade e finanças
+│       ├── ES e ML
+│       └── pi_ciência de dados
+│
 ├── imagens
 │
-├── src
-|   ├── backend
-|   └── frontend
-|
-├── executáveis  
-|
-├── Documentos
-│   ├── Entrega 1
-│   │   ├── Análise Inferencial de Dados
-│   │   ├── Contabilidade e Finanças
-│   │   ├── Engenharia de Software e Arquitetura de Sistemas
-│   │   └── Projeto Interdisciplinar: Ciência de Dados
-│   └── Entrega 2
-│       ├── Análise Inferencial de Dados
-│       ├── Contabilidade e Finanças
-│       ├── Engenharia de Software e Arquitetura de Sistemas
-│       └── Projeto Interdisciplinar: Ciência de Dados
+├── notebooks
+│   ├── 01_exploracao.ipynb
+│   ├── 02_tratamento.ipynb
+│   └── 03_kpis.ipynb
+│
+├── staging                      # dados_tratados.csv (gerado pelo notebook 02)
 │
 └── README.md
 </pre>
 
 
-## 🛠 Instalação
+## 💻 Como executar
 
+### 1. Pré-requisitos
 
-<b>Windows:</b>
+- <a href="https://www.python.org/downloads/">Python 3</a>
+- Jupyter Notebook (ou VS Code / JupyterLab)
 
-Não há instalação! Apenas executável!
-Encontre o JOGO.exe na pasta executáveis e execute-o como qualquer outro programa.
+### 2. Instalar as bibliotecas
 
-```sh
-Coloque código do prompt de comnando se for necessário
-```
+Todas as bibliotecas usadas nos notebooks do projeto precisam estar instaladas:
 
-<b>HTML:</b>
+| Biblioteca | Uso no projeto |
+|---|---|
+| `pandas` | leitura, tratamento e exportação dos dados |
+| `numpy` | cálculos numéricos |
+| `matplotlib` | gráficos |
+| `seaborn` | gráficos estatísticos |
+| `scipy` | funções estatísticas (notebook de análise descritiva) |
+| `openpyxl` | geração e formatação da planilha Excel de KPIs |
+| `jupyter` | execução dos notebooks |
 
-Não há instalação!
-Encontre o index.html na pasta executáveis e execute-o como uma página WEB (através de algum browser).
-
-## 💻 Configuração para Desenvolvimento
-
-Descreva como instalar todas as dependências para desenvolvimento e como rodar um test-suite automatizado de algum tipo. Se necessário, faça isso para múltiplas plataformas.
-
-Para abrir este projeto você necessita das seguintes ferramentas:
-
--<a href="https://godotengine.org/download">GODOT</a>
+Instale tudo de uma vez pelo terminal:
 
 ```sh
-make install
-npm test
-Coloque código do prompt de comnando se for necessário
+pip install pandas numpy matplotlib seaborn scipy openpyxl jupyter
 ```
+
+### 3. Executar os notebooks
+
+Abra o Jupyter a partir da pasta do projeto:
+
+```sh
+jupyter notebook
+```
+
+Em seguida, abra cada notebook e execute todas as células com **Run All** (menu *Cell > Run All* no Jupyter Notebook, ou *Run > Run All Cells* no JupyterLab / VS Code).
+
+Execute os notebooks da pasta `notebooks` **nesta ordem**, pois cada um usa arquivos gerados pelo anterior:
+
+1. `01_exploracao.ipynb` – exploração da base original (`data/raw/Demonstrativo Fecap v3.csv`)
+2. `02_tratamento.ipynb` – limpeza e transformação; gera `staging/dados_tratados.csv`
+3. `03_kpis.ipynb` – cálculo dos indicadores financeiros; gera a planilha `Analise_Financeira.xlsx`
+
+> ⚠️ Os notebooks usam caminhos relativos (ex.: `../data/raw/...`), então devem ser executados de dentro da pasta `notebooks`, sem mover os arquivos de lugar.
+
+**Notebook de Análise Descritiva** (`documentos/entrega 1/análise inferencial de dados/Entrega1_Analise_Descritiva.ipynb`): esse notebook lê o arquivo `Demonstrativo_Normalizado.csv`, que deve estar na mesma pasta do notebook antes de dar **Run All**.
 
 ## 📋 Licença/License
 <a href="https://github.com/2026-2-NCC4/Projeto1.git">Atlas - CTI Analytics </a> © 2026 by <a href="https://github.com/2026-2-NCC4/Projeto1.git">Mariana Almeida, Julia Godinho, Rafaela Florêncio Morais</a> is licensed under <a href="https://creativecommons.org/licenses/by/4.0/">Creative Commons Attribution 4.0 International</a>
