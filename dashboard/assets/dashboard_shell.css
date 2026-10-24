@@ -1,0 +1,553 @@
+@import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&display=swap');
+
+:root {
+    --cti-blue: #004B85;
+    --cti-dark: #003F75;
+    --cti-text: #164A78;
+    --cti-muted: #55799F;
+    --cti-frame: #DCEBFC;      /* sidebar + header: mesma superfície */
+    --cti-page: #F8FBFF;
+    --cti-line: #C3D9F2;
+
+    --cti-bar-h: 76px;         /* logo do sidebar e header têm a mesma altura */
+    --cti-sb-w: 264px;
+    --cti-row-h: 40px;
+    --cti-radius: 10px;
+}
+
+body:has(.cti-collapsed-marker) {
+    --cti-sb-w: 88px;
+}
+
+html, body, .stApp {
+    font-family: 'DM Sans', sans-serif;
+}
+
+.stApp {
+    background: var(--cti-page);
+}
+
+[data-testid="stHeader"] {
+    background: transparent;
+    height: 0;
+}
+
+[data-testid="stToolbar"] {
+    display: none;
+}
+
+[data-testid="stMainBlockContainer"],
+.block-container {
+    max-width: 100%;
+    padding: 0 !important;
+}
+
+[data-testid="stMainBlockContainer"] > [data-testid="stVerticalBlock"] {
+    gap: 0;
+}
+
+/* ───────────────────────── SIDEBAR ───────────────────────── */
+
+[data-testid="stSidebar"] {
+    background: var(--cti-frame) !important;
+    border-right: none !important;
+    width: var(--cti-sb-w) !important;
+    min-width: var(--cti-sb-w) !important;
+    max-width: var(--cti-sb-w) !important;
+    transition: width .22s ease, min-width .22s ease, max-width .22s ease;
+}
+
+[data-testid="stSidebar"] > div:first-child {
+    background: transparent !important;
+}
+
+/* some o cabeçalho nativo (60px de espaço vazio no topo) */
+[data-testid="stSidebarHeader"] {
+    display: none !important;
+}
+
+/* o sidebar em si nunca rola; só a área de navegação, se faltar altura */
+[data-testid="stSidebarContent"] {
+    overflow: hidden !important;
+    padding: 0 !important;
+}
+
+/* o markdown do Streamlit puxa -16px de margem e encolhe o bloco */
+[data-testid="stSidebar"] [data-testid="stMarkdownContainer"] {
+    margin-bottom: 0 !important;
+}
+
+[data-testid="stSidebarUserContent"] {
+    padding: 0 !important;
+    height: 100vh;
+}
+
+[data-testid="stSidebarUserContent"] > div {
+    height: 100%;
+}
+
+[data-testid="stVerticalBlock"]:has(> [data-testid="stLayoutWrapper"] > .st-key-cti_sidebar_logo) {
+    height: 100% !important;
+    gap: 0 !important;
+    padding: 0 12px;
+    display: flex;
+    flex-direction: column;
+}
+
+body:has(.cti-collapsed-marker)
+[data-testid="stVerticalBlock"]:has(> [data-testid="stLayoutWrapper"] > .st-key-cti_sidebar_logo) {
+    padding: 0 10px;
+}
+
+[data-testid="stLayoutWrapper"]:has(> .st-key-cti_sidebar_logo),
+[data-testid="stLayoutWrapper"]:has(> .st-key-cti_sidebar_bottom) {
+    flex: 0 0 auto;
+}
+
+[data-testid="stLayoutWrapper"]:has(> .st-key-cti_sidebar_navigation) {
+    flex: 1 1 0;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+}
+
+/* ── Logo ── */
+
+.st-key-cti_sidebar_logo {
+    min-height: var(--cti-bar-h) !important;
+    height: var(--cti-bar-h) !important;
+    display: flex !important;
+    flex-direction: column !important;
+    justify-content: center !important;
+    padding: 0 0 0 12px;
+}
+
+.st-key-cti_sidebar_logo [data-testid="stHorizontalBlock"] {
+    align-items: center;
+    flex-wrap: nowrap;
+}
+
+.cti-logo-wrap {
+    display: flex;
+    align-items: center;
+    line-height: 0;
+}
+
+.cti-logo-full {
+    height: 34px;
+    width: auto;
+    display: block;
+}
+
+.cti-logo-mini {
+    height: 26px;
+    width: auto;
+    display: block;
+}
+
+body:has(.cti-collapsed-marker) .st-key-cti_sidebar_logo {
+    padding: 0;
+}
+
+body:has(.cti-collapsed-marker) .cti-logo-wrap {
+    justify-content: center;
+}
+
+[data-testid="stLayoutWrapper"]:has(> .st-key-cti_toggle_row) {
+    flex: 0 0 auto;
+}
+
+.st-key-cti_toggle_row {
+    padding-bottom: 4px;
+}
+
+.st-key-cti_toggle button {
+    border: 0 !important;
+    background: transparent !important;
+    box-shadow: none !important;
+    color: var(--cti-blue) !important;
+    min-height: 36px !important;
+    width: 36px !important;
+    padding: 0 !important;
+    margin-left: auto;
+    justify-content: center !important;
+}
+
+.st-key-cti_toggle button:hover {
+    background: rgba(255,255,255,.6) !important;
+}
+
+body:has(.cti-collapsed-marker) .st-key-cti_toggle button {
+    margin: 0 auto;
+}
+
+/* ── Navegação ── */
+
+.st-key-cti_sidebar_navigation {
+    flex: 1 1 0;
+    min-height: 0;
+    height: 100%;
+    overflow-y: auto;
+    overflow-x: hidden;
+    gap: 2px !important;
+    padding: 8px 0 8px;
+    scrollbar-width: thin;
+    scrollbar-color: rgba(0, 75, 133, .28) transparent;
+}
+
+.st-key-cti_sidebar_navigation::-webkit-scrollbar {
+    width: 6px;
+}
+
+.st-key-cti_sidebar_navigation::-webkit-scrollbar-thumb {
+    background: rgba(0, 75, 133, .28);
+    border-radius: 6px;
+}
+
+.cti-group-title {
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: .07em;
+    color: var(--cti-muted);
+    line-height: 1;
+    margin: 16px 0 6px;
+    padding: 0 12px;
+}
+
+.cti-group-sep {
+    height: 1px;
+    background: var(--cti-line);
+    margin: 8px 10px;
+}
+
+/* ── Botões do sidebar ── */
+
+[data-testid="stSidebar"] .stButton button {
+    width: 100%;
+    min-height: var(--cti-row-h);
+    padding: 0 12px !important;
+    border: 0 !important;
+    border-radius: var(--cti-radius) !important;
+    background: transparent;
+    color: var(--cti-text);
+    box-shadow: none !important;
+    font-family: 'DM Sans', sans-serif;
+    transition: background .15s ease, color .15s ease;
+    justify-content: flex-start !important;
+}
+
+[data-testid="stSidebar"] .stButton button > div {
+    width: 100%;
+    justify-content: flex-start !important;
+}
+
+/* ícone + texto: alinhados à esquerda, mesma linha de base */
+[data-testid="stSidebar"] .stButton button span[data-has-shortcut] {
+    display: flex !important;
+    align-items: center !important;
+    justify-content: flex-start !important;
+    gap: 12px !important;
+    width: 100%;
+}
+
+[data-testid="stSidebar"] .stButton button p {
+    margin: 0 !important;
+    padding: 0 !important;
+    font-size: 14px !important;
+    font-weight: 500;
+    line-height: 20px !important;
+    letter-spacing: 0;
+    text-align: left;
+    white-space: nowrap;
+}
+
+/* ícone 20px para texto de 14px (proporção 1,43) */
+[data-testid="stSidebar"] .stButton button [data-testid="stIconMaterial"] {
+    font-size: 20px !important;
+    width: 20px !important;
+    height: 20px !important;
+    line-height: 20px !important;
+    flex-shrink: 0 !important;
+    font-variation-settings: 'FILL' 0, 'wght' 400, 'opsz' 24;
+}
+
+[data-testid="stSidebar"] .stButton button:hover {
+    background: rgba(255,255,255,.65);
+    color: var(--cti-blue);
+}
+
+[data-testid="stSidebar"] .stButton button:focus-visible {
+    outline: 2px solid var(--cti-blue);
+    outline-offset: 2px;
+}
+
+/* página ativa */
+[data-testid="stSidebar"] .stButton button[kind="primary"] {
+    background: var(--cti-blue) !important;
+    color: #fff !important;
+}
+
+[data-testid="stSidebar"] .stButton button[kind="primary"] p {
+    font-weight: 600;
+}
+
+[data-testid="stSidebar"] .stButton button[kind="primary"]
+[data-testid="stIconMaterial"] {
+    font-variation-settings: 'FILL' 1, 'wght' 400, 'opsz' 24;
+}
+
+/* Simular novo cenário: ação principal, destacada mas diferente do item ativo */
+[data-testid="stSidebar"] .st-key-cti_nav_simular_novo_cenario button {
+    background: #fff;
+    color: var(--cti-blue);
+    border: 1.5px solid var(--cti-blue) !important;
+    justify-content: center !important;
+}
+
+[data-testid="stSidebar"] .st-key-cti_nav_simular_novo_cenario button > div,
+[data-testid="stSidebar"] .st-key-cti_nav_simular_novo_cenario button span[data-has-shortcut] {
+    justify-content: center !important;
+}
+
+[data-testid="stSidebar"] .st-key-cti_nav_simular_novo_cenario button:hover {
+    background: var(--cti-blue);
+    color: #fff;
+}
+
+[data-testid="stSidebar"] .st-key-cti_nav_simular_novo_cenario button[kind="primary"] {
+    background: var(--cti-blue) !important;
+    color: #fff !important;
+}
+
+/* ── Rodapé ── */
+
+.st-key-cti_sidebar_bottom {
+    flex: 0 0 auto;
+    gap: 2px !important;
+    padding: 10px 0 14px;
+    border-top: 1px solid var(--cti-line);
+}
+
+.st-key-cti_help_card {
+    background: #fff;
+    border-radius: 12px;
+    padding: 12px;
+    margin-bottom: 8px;
+    gap: 10px !important;
+}
+
+.cti-help-heading {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.cti-help-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 34px;
+    height: 34px;
+    border-radius: 9px;
+    background: var(--cti-frame);
+    color: var(--cti-blue);
+    flex-shrink: 0;
+}
+
+.cti-help-heading strong {
+    display: block;
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--cti-text);
+    line-height: 1.2;
+    margin-bottom: 2px;
+}
+
+.cti-help-heading p {
+    margin: 0;
+    font-size: 11.5px;
+    line-height: 1.35;
+    color: var(--cti-muted);
+}
+
+.st-key-cti_ajuda button {
+    background: var(--cti-blue) !important;
+    color: #fff !important;
+    min-height: 34px !important;
+    justify-content: center !important;
+}
+
+.st-key-cti_ajuda button > div,
+.st-key-cti_ajuda button span[data-has-shortcut] {
+    justify-content: center !important;
+}
+
+.st-key-cti_ajuda button p {
+    font-size: 12px !important;
+    font-weight: 700 !important;
+    letter-spacing: .04em;
+    text-transform: uppercase;
+}
+
+.st-key-cti_ajuda button:hover {
+    background: var(--cti-dark) !important;
+    color: #fff !important;
+}
+
+/* ── Sidebar recolhido: só ícones, centralizados ── */
+
+body:has(.cti-collapsed-marker) [data-testid="stSidebar"] .stButton button {
+    justify-content: center !important;
+    padding: 0 !important;
+    min-height: 44px;
+}
+
+body:has(.cti-collapsed-marker) [data-testid="stSidebar"] .stButton button > div,
+body:has(.cti-collapsed-marker) [data-testid="stSidebar"] .stButton button span[data-has-shortcut] {
+    justify-content: center !important;
+    gap: 0 !important;
+}
+
+body:has(.cti-collapsed-marker) [data-testid="stSidebar"] .stButton button p {
+    display: none !important;
+}
+
+body:has(.cti-collapsed-marker) [data-testid="stSidebar"] .st-key-cti_nav_simular_novo_cenario button {
+    border-width: 1.5px !important;
+}
+
+/* ───────────────────────── HEADER ───────────────────────── */
+
+.st-key-cti_topbar {
+    position: relative;
+    height: var(--cti-bar-h) !important;
+    min-height: var(--cti-bar-h) !important;
+    padding: 0 28px;
+    background: var(--cti-frame);
+    display: flex;
+    justify-content: center;
+}
+
+/* canto interno arredondado: sidebar + header formam um "L" contínuo */
+.st-key-cti_topbar::after {
+    content: "";
+    position: absolute;
+    left: 0;
+    top: 100%;
+    width: 22px;
+    height: 22px;
+    background: radial-gradient(circle at 100% 100%, transparent 21.5px, var(--cti-frame) 22px);
+    pointer-events: none;
+}
+
+.st-key-cti_topbar [data-testid="stHorizontalBlock"] {
+    width: 100%;
+    flex-wrap: nowrap;
+    align-items: center;
+    gap: 6px !important;
+}
+
+/* busca ocupa o espaço; ícones ficam agrupados à direita */
+.st-key-cti_topbar [data-testid="stColumn"] {
+    min-width: 0 !important;
+    flex: 0 0 44px !important;
+    width: 44px !important;
+}
+
+.st-key-cti_topbar [data-testid="stColumn"]:first-child {
+    flex: 0 1 520px !important;
+    width: auto !important;
+    margin-right: auto;
+}
+
+/* separador antes do perfil */
+.st-key-cti_topbar [data-testid="stColumn"]:last-child {
+    margin-left: 8px;
+    position: relative;
+}
+
+.st-key-cti_topbar [data-testid="stColumn"]:last-child::before {
+    content: "";
+    position: absolute;
+    left: -8px;
+    top: 50%;
+    height: 24px;
+    width: 1px;
+    transform: translateY(-50%);
+    background: var(--cti-line);
+}
+
+.st-key-cti_topbar [data-testid="stTextInputRootElement"] {
+    min-height: 44px;
+    background: #fff;
+    border: 1px solid var(--cti-line);
+    border-radius: 12px;
+    box-shadow: none;
+    transition: border-color .15s ease, box-shadow .15s ease;
+}
+
+.st-key-cti_topbar [data-testid="stTextInputRootElement"]:focus-within {
+    border-color: var(--cti-blue);
+    box-shadow: 0 0 0 3px rgba(0, 75, 133, .14);
+}
+
+.st-key-cti_topbar input {
+    color: var(--cti-text);
+    font-family: 'DM Sans', sans-serif;
+    font-size: 14px;
+}
+
+.st-key-cti_topbar input::placeholder {
+    color: #7F9CBB;
+}
+
+.st-key-cti_topbar .stButton button {
+    width: 44px;
+    min-height: 44px;
+    padding: 0;
+    border: 0;
+    border-radius: 12px;
+    background: transparent;
+    color: var(--cti-blue);
+    box-shadow: none;
+    justify-content: center;
+}
+
+.st-key-cti_topbar .stButton button:hover {
+    background: rgba(255,255,255,.7);
+}
+
+.st-key-cti_topbar .stButton button:focus-visible {
+    outline: 2px solid var(--cti-blue);
+    outline-offset: 2px;
+}
+
+.st-key-cti_topbar .stButton button [data-testid="stIconMaterial"] {
+    font-size: 24px !important;
+    font-variation-settings: 'FILL' 0, 'wght' 400, 'opsz' 24;
+}
+
+/* ── Telas baixas: compacta em vez de rolar ── */
+
+@media (max-height: 860px) {
+    :root { --cti-row-h: 36px; }
+    .cti-group-title { margin-top: 12px; }
+    .cti-help-heading p { display: none; }
+    .st-key-cti_help_card { padding: 10px; }
+}
+
+/* notebooks / janelas baixas: tudo cabe sem rolar */
+@media (max-height: 760px) {
+    :root { --cti-row-h: 34px; }
+    .cti-group-title { margin: 8px 0 4px; }
+    .cti-help-heading { display: none; }
+    .st-key-cti_help_card { padding: 6px; margin-bottom: 4px; }
+    .st-key-cti_sidebar_bottom { padding: 8px 0 10px; }
+}
+
+/* ESCONDER CONTROLE NATIVO */
+
+[data-testid="stSidebarCollapseButton"],
+[data-testid="stSidebarCollapsedControl"] {
+    display: none !important;
+}
