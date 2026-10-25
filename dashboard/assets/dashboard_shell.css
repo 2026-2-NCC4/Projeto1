@@ -86,7 +86,12 @@ html, body, .stApp {
     height: 100%;
 }
 
-[data-testid="stVerticalBlock"]:has(> [data-testid="stLayoutWrapper"] > .st-key-cti_sidebar_logo) {
+/* Coluna principal do sidebar (logo / navegação / rodapé).
+   Selecionada pela posição, e não por :has(stLayoutWrapper), porque o
+   Streamlit só envolve os blocos com `key` em [data-testid="stLayoutWrapper"]
+   nas versões novas. Nas antigas o bloco com key é filho direto — com o
+   seletor antigo o menu colapsava para ~12px de altura. Funciona nos dois. */
+[data-testid="stSidebarUserContent"] > div > [data-testid="stVerticalBlock"] {
     height: 100% !important;
     gap: 0 !important;
     padding: 0 12px;
@@ -95,13 +100,25 @@ html, body, .stApp {
 }
 
 body:has(.cti-collapsed-marker)
-[data-testid="stVerticalBlock"]:has(> [data-testid="stLayoutWrapper"] > .st-key-cti_sidebar_logo) {
+[data-testid="stSidebarUserContent"] > div > [data-testid="stVerticalBlock"] {
     padding: 0 10px;
 }
 
+/* versões antigas: o próprio bloco com key é o item do flex.
+   versões novas: o item é o stLayoutWrapper que o envolve. */
+.st-key-cti_sidebar_logo,
+.st-key-cti_sidebar_bottom,
+.st-key-cti_toggle_row,
 [data-testid="stLayoutWrapper"]:has(> .st-key-cti_sidebar_logo),
-[data-testid="stLayoutWrapper"]:has(> .st-key-cti_sidebar_bottom) {
+[data-testid="stLayoutWrapper"]:has(> .st-key-cti_sidebar_bottom),
+[data-testid="stLayoutWrapper"]:has(> .st-key-cti_toggle_row) {
     flex: 0 0 auto;
+}
+
+[data-testid="stSidebarUserContent"] > div > [data-testid="stVerticalBlock"]
+> .st-key-cti_sidebar_navigation {
+    flex: 1 1 0;
+    min-height: 0;
 }
 
 [data-testid="stLayoutWrapper"]:has(> .st-key-cti_sidebar_navigation) {
@@ -527,22 +544,31 @@ body:has(.cti-collapsed-marker) [data-testid="stSidebar"] .st-key-cti_nav_simula
     font-variation-settings: 'FILL' 0, 'wght' 400, 'opsz' 24;
 }
 
+
 /* ── Telas baixas: compacta em vez de rolar ── */
 
+/* O card de ajuda é o item mais "caro" em altura (~125px). Em vez de
+   espremer o card e todos os itens, ele some por inteiro: a ajuda continua
+   acessível pelo ícone "?" do header. Os itens só encolhem de verdade
+   quando ainda assim não couberem. */
 @media (max-height: 860px) {
-    :root { --cti-row-h: 36px; }
-    .cti-group-title { margin-top: 12px; }
-    .cti-help-heading p { display: none; }
-    .st-key-cti_help_card { padding: 10px; }
+    :root { --cti-row-h: 38px; }
+    .cti-group-title { margin: 12px 0 4px; }
+    .st-key-cti_help_card { display: none !important; }
+    .st-key-cti_sidebar_bottom { padding: 8px 0 12px; }
 }
 
-/* notebooks / janelas baixas: tudo cabe sem rolar */
-@media (max-height: 760px) {
+@media (max-height: 740px) {
+    :root { --cti-row-h: 36px; }
+    .cti-group-title { margin: 8px 0 3px; }
+}
+
+/* janelas muito baixas: a navegação rola (já está configurada acima),
+   sem nunca ficar atrás do rodapé */
+@media (max-height: 640px) {
     :root { --cti-row-h: 34px; }
-    .cti-group-title { margin: 8px 0 4px; }
-    .cti-help-heading { display: none; }
-    .st-key-cti_help_card { padding: 6px; margin-bottom: 4px; }
-    .st-key-cti_sidebar_bottom { padding: 8px 0 10px; }
+    .cti-group-title { margin: 6px 0 2px; }
+    .st-key-cti_sidebar_bottom { padding: 6px 0 8px; }
 }
 
 /* ESCONDER CONTROLE NATIVO */
