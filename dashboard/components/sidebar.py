@@ -8,7 +8,6 @@ from PIL import Image
 
 LOGO = Path(__file__).resolve().parents[1] / "assets" / "logo cti 1.png"
 
-# (título do grupo, [(nome da página, ícone Material)])
 # Os nomes das páginas continuam exatamente os mesmos.
 GRUPOS = [
     (None, [("Visão Geral", "dashboard")]),
