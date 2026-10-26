@@ -6,6 +6,8 @@ from pathlib import Path
 import streamlit as st
 from PIL import Image
 
+from components.auth import sair
+
 LOGO = Path(__file__).resolve().parents[1] / "assets" / "logo cti 1.png"
 
 # Os nomes das páginas continuam exatamente os mesmos.
@@ -195,6 +197,6 @@ def render_sidebar():
                 use_container_width=True,
                 help="Sair" if recolhido else None,
             ):
-                st.toast("Logout será integrado ao cadastro.")
+                sair()
 
     return st.session_state.pagina_atual

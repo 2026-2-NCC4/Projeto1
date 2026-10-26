@@ -1,7 +1,11 @@
 import streamlit as st
 
+from components.auth import usuario_logado
+
 
 def render_header():
+    usuario = usuario_logado() or {}
+
     with st.container(key="cti_topbar"):
         busca, ajuda, notificacoes, perfil = st.columns(
             [1, 1, 1, 1],
@@ -42,6 +46,6 @@ def render_header():
                 "",
                 icon=":material/account_circle:",
                 key="cti_header_perfil",
-                help="Perfil",
+                help=usuario.get("nome", "Perfil"),
             ):
-                st.toast("Perfil em desenvolvimento.")
+                st.toast(f"{usuario.get('nome', '')} · {usuario.get('email', '')}")

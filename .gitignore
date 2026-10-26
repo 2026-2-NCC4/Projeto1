@@ -141,3 +141,6 @@ dist
 vite.config.js.timestamp-*
 vite.config.ts.timestamp-*
 .vite/
+
+# Banco local de usuários do dashboard
+dashboard/data/usuarios.db

@@ -3,16 +3,22 @@ from pathlib import Path
 
 import streamlit as st
 
+from components.auth import render_auth_page, usuario_logado
 from components.sidebar import render_sidebar
 from components.header import render_header
 from pages.visao_geral import render_visao_geral
 
 
 st.set_page_config(
-    page_title="CTI | Dashboard",
+    page_title="CTI | Dashboard" if usuario_logado() else "CTI | Entrar",
     layout="wide",
     initial_sidebar_state="expanded",
 )
+
+# Sem usuário autenticado, só a tela de login/cadastro é exibida
+if not usuario_logado():
+    render_auth_page()
+    st.stop()
 
 st.session_state.setdefault("pagina_atual", "Visão Geral")
 st.session_state.setdefault("sidebar_recolhido", False)

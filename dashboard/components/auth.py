@@ -1,9 +1,16 @@
 import base64
+import time
 from pathlib import Path
 
 import streamlit as st
 
+from components.carousel import render_carousel
+from data.usuarios import ErroCadastro, autenticar, cadastrar_usuario
+
 ASSETS = Path(__file__).resolve().parent.parent / "assets"
+
+MAX_TENTATIVAS = 5
+BLOQUEIO_SEGUNDOS = 60
 
 AUTH_STYLE = """
 <style>
@@ -148,6 +155,140 @@ AUTH_STYLE = """
 """
 
 
+PAGE_STYLE = """
+<style>
+    .stApp {
+        isolation: isolate;
+        background:
+            radial-gradient(60% 50% at 6% 10%, rgba(56, 189, 248, 0.50), transparent 70%),
+            radial-gradient(55% 55% at 96% 8%, rgba(129, 140, 248, 0.42), transparent 70%),
+            radial-gradient(60% 60% at 88% 96%, rgba(14, 165, 233, 0.38), transparent 70%),
+            radial-gradient(50% 50% at 8% 96%, rgba(99, 102, 241, 0.28), transparent 70%),
+            linear-gradient(135deg, #EAF6FD 0%, #D5E8F8 50%, #E4E3FA 100%);
+    }
+
+    .stApp::before {
+        content: "";
+        position: fixed;
+        inset: 0;
+        z-index: -1;
+        pointer-events: none;
+        background-image: radial-gradient(rgba(23, 77, 131, 0.22) 1.5px, transparent 1.5px);
+        background-size: 26px 26px;
+        -webkit-mask-image: linear-gradient(to bottom, rgba(0, 0, 0, 0.55), transparent 65%);
+        mask-image: linear-gradient(to bottom, rgba(0, 0, 0, 0.55), transparent 65%);
+    }
+
+    [data-testid="stHeader"] {
+        background: transparent;
+    }
+
+    [data-testid="stSidebar"],
+    [data-testid="stSidebarCollapsedControl"] {
+        display: none;
+    }
+
+    .block-container {
+        max-width: 1120px;
+        padding: 4rem 2rem 3rem;
+    }
+
+    .st-key-login_card {
+        background: #FFFFFF;
+        border: 1px solid #DCE8F2;
+        border-radius: 26px;
+        overflow: hidden;
+        box-shadow: 0 30px 70px rgba(28, 65, 110, 0.20);
+    }
+
+    .st-key-login_card > div[data-testid="stVerticalBlock"] {
+        gap: 0 !important;
+    }
+
+    .st-key-login_card div[data-testid="stHorizontalBlock"] {
+        gap: 0 !important;
+        align-items: stretch !important;
+    }
+
+    .st-key-login_card div[data-testid="stColumn"],
+    .st-key-login_card div[data-testid="column"] {
+        min-width: 0;
+        padding: 0 !important;
+    }
+
+    .st-key-carousel_col,
+    .st-key-carousel_col div[data-testid="stElementContainer"] {
+        margin: 0;
+        padding: 0;
+    }
+
+    .st-key-carousel_col iframe {
+        display: block;
+        width: 100%;
+        border: 0;
+    }
+
+    .st-key-login_card .st-key-auth_content {
+        padding: 42px 48px !important;
+        min-height: 520px;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+    }
+
+    @media (max-width: 800px) {
+        .block-container {
+            padding: 1rem;
+        }
+
+        .st-key-login_card div[data-testid="stColumn"]:first-child,
+        .st-key-login_card div[data-testid="column"]:first-child {
+            display: none;
+        }
+
+        .st-key-login_card .st-key-auth_content {
+            padding: 30px 24px !important;
+            min-height: auto;
+        }
+    }
+</style>
+"""
+
+
+# ---------- Sessão ----------
+
+def usuario_logado():
+    """Devolve o usuário autenticado nesta sessão (dict com id, nome e email) ou None."""
+    return st.session_state.get("usuario")
+
+
+def _iniciar_sessao(usuario):
+    st.session_state.usuario = usuario
+    st.session_state.pop("login_falhas", None)
+    st.session_state.pop("login_bloqueado_ate", None)
+    st.rerun()
+
+
+def sair():
+    """Encerra a sessão e limpa o estado do dashboard."""
+    st.session_state.clear()
+    st.rerun()
+
+
+def _registrar_falha():
+    falhas = st.session_state.get("login_falhas", 0) + 1
+    st.session_state.login_falhas = falhas
+
+    if falhas >= MAX_TENTATIVAS:
+        st.session_state.login_bloqueado_ate = time.time() + BLOQUEIO_SEGUNDOS
+        st.session_state.login_falhas = 0
+
+
+def _segundos_bloqueado():
+    restante = st.session_state.get("login_bloqueado_ate", 0) - time.time()
+    return int(restante) + 1 if restante > 0 else 0
+
+
 def _logo_base64():
     logo_path = ASSETS / "logo cti 1.png"
 
@@ -176,10 +317,23 @@ def _render_login():
         entrar = st.form_submit_button("Entrar", use_container_width=True)
 
     if entrar:
-        if not email or not senha:
+        restante = _segundos_bloqueado()
+
+        if restante:
+            st.error(
+                "Muitas tentativas sem sucesso. "
+                f"Tente novamente em {restante} segundos."
+            )
+        elif not email or not senha:
             st.warning("Preencha o e-mail e a senha.")
         else:
-            st.info("A autenticação será integrada depois.")
+            usuario = autenticar(email, senha)
+
+            if usuario:
+                _iniciar_sessao(usuario)
+            else:
+                _registrar_falha()
+                st.error("E-mail ou senha incorretos.")
 
     if st.button("Esqueceu sua senha?", key="forgot_password", type="tertiary"):
         st.info("A recuperação de senha será implementada depois.")
@@ -217,13 +371,15 @@ def _render_register():
         )
         cadastrar = st.form_submit_button("Criar conta", use_container_width=True)
 
+    st.caption("A senha deve ter pelo menos 8 caracteres, com letras e números.")
+
     if cadastrar:
-        if not all([nome, email, senha, confirmar]):
-            st.warning("Preencha todos os campos.")
-        elif senha != confirmar:
-            st.error("As senhas não coincidem.")
+        try:
+            usuario = cadastrar_usuario(nome, email, senha, confirmar)
+        except ErroCadastro as erro:
+            st.error(str(erro))
         else:
-            st.info("O cadastro será conectado ao banco de dados depois.")
+            _iniciar_sessao(usuario)
 
     if st.button("Já tenho uma conta", use_container_width=True, key="go_login"):
         st.session_state.auth_mode = "login"
@@ -249,3 +405,19 @@ def render_auth():
         _render_login()
     else:
         _render_register()
+
+
+def render_auth_page():
+    """Tela completa de entrada: carrossel à esquerda e login/cadastro à direita."""
+    st.markdown(PAGE_STYLE, unsafe_allow_html=True)
+
+    with st.container(key="login_card"):
+        col_carousel, col_auth = st.columns([1, 1.1], gap="small")
+
+        with col_carousel:
+            with st.container(key="carousel_col"):
+                render_carousel()
+
+        with col_auth:
+            with st.container(key="auth_content"):
+                render_auth()
