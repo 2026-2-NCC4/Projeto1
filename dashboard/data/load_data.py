@@ -13,6 +13,16 @@ CAMINHO_PLANILHA = (
     / "Analise_Financeira.xlsx"
 )
 
+# Base larga (1.200 cenários x 12 anos) com as contas da DRE, do fluxo
+# de caixa e do balanço em colunas. É a mesma usada na análise de regressão.
+CAMINHO_DEMONSTRATIVO = (
+    ROOT_DIR
+    / "documentos"
+    / "entrega 1"
+    / "análise inferencial de dados"
+    / "Demonstrativo_Normalizado.csv"
+)
+
 
 @st.cache_data
 def carregar_indicadores():
@@ -95,3 +105,25 @@ def resumir_indicadores():
     )
 
     return resumo
+
+#carregando a base larga do demonstrativo, usada na página de regressão
+@st.cache_data
+def carregar_demonstrativo():
+
+    if not CAMINHO_DEMONSTRATIVO.is_file():
+        raise FileNotFoundError(
+            "O arquivo Demonstrativo_Normalizado.csv não foi encontrado. "
+            f"Caminho esperado: {CAMINHO_DEMONSTRATIVO}"
+        )
+
+    df = pd.read_csv(
+        CAMINHO_DEMONSTRATIVO,
+        sep=";",
+        decimal=",",
+        encoding="utf-8-sig",
+    )
+
+    df["Ano"] = pd.to_numeric(df["Ano"], errors="coerce").astype("Int64")
+    df["Cenario"] = pd.to_numeric(df["Cenario"], errors="coerce").astype("Int64")
+
+    return df

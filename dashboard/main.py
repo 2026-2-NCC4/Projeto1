@@ -6,6 +6,7 @@ import streamlit as st
 from components.auth import render_auth_page, usuario_logado
 from components.sidebar import render_sidebar
 from components.header import render_header
+from pages.regressao import render_regressao
 from pages.visao_geral import render_visao_geral
 
 
@@ -45,6 +46,8 @@ render_header()
 
 if pagina == "Visão Geral":
     render_visao_geral()
+elif pagina == "Regressão":
+    render_regressao()
 else:
     st.title(pagina)
     st.info(f"A página {pagina} será desenvolvida posteriormente.")
