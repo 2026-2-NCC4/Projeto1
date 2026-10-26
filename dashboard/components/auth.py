@@ -1,11 +1,21 @@
 import base64
 import time
+from html import escape
 from pathlib import Path
 
 import streamlit as st
 
 from components.carousel import render_carousel
-from data.usuarios import ErroCadastro, autenticar, cadastrar_usuario
+from data.envio_email import configuracao_smtp, enviar_codigo_redefinicao
+from data.usuarios import (
+    VALIDADE_CODIGO_MINUTOS,
+    ErroCadastro,
+    autenticar,
+    cadastrar_usuario,
+    gerar_codigo_redefinicao,
+    normalizar_email,
+    redefinir_senha,
+)
 
 ASSETS = Path(__file__).resolve().parent.parent / "assets"
 
@@ -307,6 +317,11 @@ def _render_login():
         </div>
     """, unsafe_allow_html=True)
 
+    # Mensagem deixada por outra tela (ex.: senha redefinida)
+    aviso = st.session_state.pop("auth_aviso", None)
+    if aviso:
+        st.success(aviso)
+
     with st.form("login_form"):
         email = st.text_input("E-mail", placeholder="Digite seu e-mail")
         senha = st.text_input(
@@ -336,7 +351,8 @@ def _render_login():
                 st.error("E-mail ou senha incorretos.")
 
     if st.button("Esqueceu sua senha?", key="forgot_password", type="tertiary"):
-        st.info("A recuperação de senha será implementada depois.")
+        st.session_state.auth_mode = "forgot"
+        st.rerun()
 
     st.markdown(
         '<div class="auth-footer">Ainda não tem uma conta?</div>',
@@ -386,6 +402,115 @@ def _render_register():
         st.rerun()
 
 
+def _limpar_redefinicao():
+    for chave in ("redef_email", "redef_codigo_teste"):
+        st.session_state.pop(chave, None)
+
+
+def _voltar_ao_login(aviso=None):
+    _limpar_redefinicao()
+    st.session_state.auth_mode = "login"
+    if aviso:
+        st.session_state.auth_aviso = aviso
+    st.rerun()
+
+
+def _solicitar_codigo(email):
+    """Gera o código e envia por e-mail (ou guarda para mostrar, no modo de teste)."""
+    resultado = gerar_codigo_redefinicao(email)
+
+    if resultado:
+        nome, codigo = resultado
+        st.session_state.pop("redef_codigo_teste", None)
+
+        if configuracao_smtp() is None:
+            st.session_state.redef_codigo_teste = codigo
+        else:
+            try:
+                enviar_codigo_redefinicao(email, nome, codigo, VALIDADE_CODIGO_MINUTOS)
+            except Exception:
+                st.error("Não foi possível enviar o e-mail agora. Tente novamente em instantes.")
+                return False
+
+    st.session_state.redef_email = normalizar_email(email)
+    return True
+
+
+def _render_esqueci_email():
+    st.markdown("""
+        <div class="auth-title">Esqueceu sua senha?</div>
+        <div class="auth-description">
+            Informe o e-mail da sua conta. Vamos enviar um código
+            de 6 dígitos para você criar uma nova senha.
+        </div>
+    """, unsafe_allow_html=True)
+
+    with st.form("forgot_form"):
+        email = st.text_input("E-mail", placeholder="Digite seu e-mail")
+        enviar = st.form_submit_button("Enviar código", use_container_width=True)
+
+    if enviar:
+        if not email.strip():
+            st.warning("Informe o e-mail.")
+        elif _solicitar_codigo(email):
+            st.rerun()
+
+    if st.button("Voltar ao login", use_container_width=True, key="forgot_back"):
+        _voltar_ao_login()
+
+
+def _render_esqueci_codigo():
+    email = st.session_state.redef_email
+
+    st.markdown(f"""
+        <div class="auth-title">Crie uma nova senha</div>
+        <div class="auth-description">
+            Se houver uma conta com <strong>{escape(email)}</strong>, enviamos um código
+            de 6 dígitos. Ele vale por {VALIDADE_CODIGO_MINUTOS} minutos.
+        </div>
+    """, unsafe_allow_html=True)
+
+    codigo_teste = st.session_state.get("redef_codigo_teste")
+    if codigo_teste:
+        st.warning(
+            f"Modo de teste: o envio de e-mail não está configurado, por isso "
+            f"o código aparece aqui: **{codigo_teste}**. Configure o SMTP em "
+            "`.streamlit/secrets.toml` antes de publicar a plataforma."
+        )
+
+    with st.form("reset_form"):
+        codigo = st.text_input("Código", placeholder="Digite o código de 6 dígitos", max_chars=6)
+        senha = st.text_input("Nova senha", type="password", placeholder="Crie uma nova senha")
+        confirmar = st.text_input(
+            "Confirmar nova senha", type="password", placeholder="Confirme a nova senha"
+        )
+        redefinir = st.form_submit_button("Redefinir senha", use_container_width=True)
+
+    st.caption("A senha deve ter pelo menos 8 caracteres, com letras e números.")
+
+    if redefinir:
+        try:
+            redefinir_senha(email, codigo, senha, confirmar)
+        except ErroCadastro as erro:
+            st.error(str(erro))
+        else:
+            _voltar_ao_login("Senha redefinida. Entre com a nova senha.")
+
+    if st.button("Reenviar código", key="reset_resend", type="tertiary"):
+        if _solicitar_codigo(email):
+            st.info("Se o e-mail tiver conta, um novo código foi enviado.")
+
+    if st.button("Voltar ao login", use_container_width=True, key="reset_back"):
+        _voltar_ao_login()
+
+
+def _render_esqueci_senha():
+    if st.session_state.get("redef_email"):
+        _render_esqueci_codigo()
+    else:
+        _render_esqueci_email()
+
+
 def render_auth():
     st.markdown(AUTH_STYLE, unsafe_allow_html=True)
 
@@ -403,6 +528,8 @@ def render_auth():
 
     if st.session_state.auth_mode == "login":
         _render_login()
+    elif st.session_state.auth_mode == "forgot":
+        _render_esqueci_senha()
     else:
         _render_register()
 

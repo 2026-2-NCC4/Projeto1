@@ -144,3 +144,6 @@ vite.config.ts.timestamp-*
 
 # Banco local de usuários do dashboard
 dashboard/data/usuarios.db
+
+# Credenciais locais do Streamlit (SMTP etc.)
+dashboard/.streamlit/secrets.toml

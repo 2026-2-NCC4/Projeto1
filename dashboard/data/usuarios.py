@@ -3,6 +3,7 @@ import hmac
 import re
 import secrets
 import sqlite3
+import time
 from contextlib import contextmanager
 from pathlib import Path
 
@@ -13,6 +14,11 @@ ALGORITMO = "pbkdf2_sha256"
 ITERACOES = 600_000
 
 EMAIL_REGEX = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
+
+# Recuperação de senha
+VALIDADE_CODIGO_MINUTOS = 15
+MAX_TENTATIVAS_CODIGO = 5
+INTERVALO_REENVIO_SEGUNDOS = 60
 
 
 class ErroCadastro(ValueError):
@@ -34,6 +40,16 @@ def _conectar():
                     email TEXT NOT NULL UNIQUE COLLATE NOCASE,
                     senha_hash TEXT NOT NULL,
                     criado_em TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+                )
+            """)
+            # Um código de redefinição ativo por e-mail (guardado só como hash)
+            conexao.execute("""
+                CREATE TABLE IF NOT EXISTS redefinicoes_senha (
+                    email TEXT PRIMARY KEY COLLATE NOCASE,
+                    codigo_hash TEXT NOT NULL,
+                    criado_em REAL NOT NULL,
+                    expira_em REAL NOT NULL,
+                    tentativas INTEGER NOT NULL DEFAULT 0
                 )
             """)
             yield conexao
@@ -88,6 +104,13 @@ def validar_cadastro(nome, email, senha, confirmar):
     if not EMAIL_REGEX.match(normalizar_email(email)):
         raise ErroCadastro("Informe um e-mail válido.")
 
+    validar_senha(senha, confirmar)
+
+
+def validar_senha(senha, confirmar):
+    if not senha or not confirmar:
+        raise ErroCadastro("Preencha a senha e a confirmação.")
+
     if len(senha) < 8:
         raise ErroCadastro("A senha deve ter pelo menos 8 caracteres.")
 
@@ -135,3 +158,84 @@ def autenticar(email, senha):
         return None
 
     return {"id": linha["id"], "nome": linha["nome"], "email": linha["email"]}
+
+
+# ---------- Recuperação de senha ----------
+
+def gerar_codigo_redefinicao(email):
+    """Cria um código de 6 dígitos para redefinir a senha.
+
+    Devolve (nome, codigo) quando o e-mail tem conta. Devolve None se não
+    houver conta ou se um código acabou de ser enviado — a tela mostra a
+    mesma mensagem nos dois casos, para não revelar quais e-mails existem.
+    """
+    email = normalizar_email(email)
+    agora = time.time()
+
+    with _conectar() as conexao:
+        usuario = conexao.execute(
+            "SELECT nome FROM usuarios WHERE email = ?", (email,)
+        ).fetchone()
+
+        if usuario is None:
+            return None
+
+        anterior = conexao.execute(
+            "SELECT criado_em FROM redefinicoes_senha WHERE email = ?", (email,)
+        ).fetchone()
+
+        if anterior and agora - anterior["criado_em"] < INTERVALO_REENVIO_SEGUNDOS:
+            return None
+
+        codigo = f"{secrets.randbelow(10 ** 6):06d}"
+        conexao.execute(
+            """
+            INSERT OR REPLACE INTO redefinicoes_senha
+                (email, codigo_hash, criado_em, expira_em, tentativas)
+            VALUES (?, ?, ?, ?, 0)
+            """,
+            (email, gerar_hash(codigo), agora, agora + VALIDADE_CODIGO_MINUTOS * 60),
+        )
+
+    return usuario["nome"], codigo
+
+
+def redefinir_senha(email, codigo, senha, confirmar):
+    """Troca a senha se o código for válido. Erros vêm como ErroCadastro."""
+    email = normalizar_email(email)
+    codigo = codigo.strip()
+
+    if not codigo:
+        raise ErroCadastro("Informe o código recebido por e-mail.")
+
+    validar_senha(senha, confirmar)
+
+    with _conectar() as conexao:
+        pedido = conexao.execute(
+            "SELECT codigo_hash, expira_em, tentativas FROM redefinicoes_senha WHERE email = ?",
+            (email,),
+        ).fetchone()
+
+        if pedido is None or time.time() > pedido["expira_em"]:
+            raise ErroCadastro("Código inválido ou expirado. Solicite um novo código.")
+
+        if not verificar_senha(codigo, pedido["codigo_hash"]):
+            tentativas = pedido["tentativas"] + 1
+
+            if tentativas >= MAX_TENTATIVAS_CODIGO:
+                conexao.execute("DELETE FROM redefinicoes_senha WHERE email = ?", (email,))
+                conexao.commit()
+                raise ErroCadastro("Muitas tentativas com código errado. Solicite um novo código.")
+
+            conexao.execute(
+                "UPDATE redefinicoes_senha SET tentativas = ? WHERE email = ?",
+                (tentativas, email),
+            )
+            conexao.commit()
+            raise ErroCadastro("Código incorreto.")
+
+        conexao.execute(
+            "UPDATE usuarios SET senha_hash = ? WHERE email = ?",
+            (gerar_hash(senha), email),
+        )
+        conexao.execute("DELETE FROM redefinicoes_senha WHERE email = ?", (email,))
