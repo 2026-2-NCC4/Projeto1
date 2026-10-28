@@ -1,0 +1,1 @@
+#tela de simular cenario 

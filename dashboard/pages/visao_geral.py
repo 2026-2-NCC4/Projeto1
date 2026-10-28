@@ -1,11 +1,19 @@
+from pathlib import Path
+
 import pandas as pd
+
 import streamlit as st
+
 import plotly.express as px
+
 import plotly.graph_objects as go
 from html import escape
+
 from data.load_data import carregar_indicadores
+
 from components.auth import usuario_logado
 
+# Mesmo visual da página de Regressão: topo com filtros, cartões brancos.
 
 PAGE_STYLE = """
 
@@ -90,9 +98,17 @@ PAGE_STYLE = """
     box-shadow: 0 4px 16px rgba(22, 55, 90, 0.045);
 
     padding: 18px;
-
     transition: box-shadow 0.2s ease, border-color 0.2s ease;
 
+}
+
+[class*="st-key-vg_kpi_"] {
+    min-height: 142px;
+    height: 142px;
+    box-sizing: border-box;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
 }
 
 /* Destaque discreto ao passar o mouse */
@@ -112,15 +128,13 @@ PAGE_STYLE = """
 /* Nome do indicador */
 
 .vg-kpi-label {
-
     font-size: 12px;
-
-    font-weight: 500;
-
+    font-weight: 650;
     color: #718096;
-
     margin-bottom: 10px;
-
+    cursor: help;
+    width: fit-content;
+    border-bottom: 1px dotted #9BAFC5;
 }
 
 /* Valor principal */
@@ -143,16 +157,28 @@ PAGE_STYLE = """
 
 /* Descrição do indicador */
 
-.vg-kpi-note {
-
+.vg-kpi-trend {
     font-size: 11px;
-
-    color: #8493A7;
-
-    line-height: 1.5;
-
-    margin-top: 7px;
-
+    font-weight: 700;
+    line-height: 1.4;
+    margin-top: 10px;
+}
+.vg-kpi-trend.positive { color: #16845B; }
+.vg-kpi-trend.negative { color: #D14343; }
+.vg-kpi-trend.neutral { color: #8493A7; }
+.st-key-vg_nova_simulacao button {
+    background: #12345A !important;
+    color: #FFFFFF !important;
+    border: 1px solid #12345A !important;
+    border-radius: 10px !important;
+    font-weight: 650 !important;
+    min-height: 42px;
+    white-space: nowrap;
+}
+.st-key-vg_nova_simulacao button:hover {
+    background: #0B2542 !important;
+    border-color: #0B2542 !important;
+    color: #FFFFFF !important;
 }
 
 /* Títulos dos gráficos */
@@ -177,6 +203,41 @@ PAGE_STYLE = """
 
     line-height: 1.5;
 
+}
+
+/* Novas áreas executivas */
+.vg-insight-card {
+    background: linear-gradient(135deg, #FFFFFF 0%, #F7FAFE 100%);
+    border: 1px solid #E5ECF4;
+    border-radius: 14px;
+    padding: 15px 16px;
+    min-height: 112px;
+}
+.vg-insight-label {
+    color: #718096;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: .3px;
+    margin-bottom: 8px;
+}
+.vg-insight-value {
+    color: #17365D;
+    font-size: 17px;
+    line-height: 1.35;
+    font-weight: 750;
+}
+.vg-insight-note {
+    color: #8493A7;
+    font-size: 11px;
+    line-height: 1.45;
+    margin-top: 6px;
+}
+.vg-chart-wrap {
+    background: #FFFFFF;
+    border: 1px solid #E5ECF4;
+    border-radius: 16px;
+    padding: 18px;
+    box-shadow: 0 4px 16px rgba(22, 55, 90, 0.045);
 }
 
     .vg-metodologia {
@@ -235,23 +296,23 @@ def formatar_numero(valor):
 
 # ---------- Blocos visuais ----------
 
-def _kpi(key, rotulo, valor, nota):
-
-    # "R$" não pode ficar sozinho numa linha quando o valor quebra
-
+def _kpi(key, rotulo, valor, variacao, explicacao):
+    """Card de KPI com explicação ao passar o cursor e comparação anual."""
     valor = valor.replace("R$ ", "R$&nbsp;")
-
+    rotulo_seguro = escape(rotulo)
+    explicacao_segura = escape(explicacao, quote=True)
     with st.container(key=key):
-
-        st.markdown(f"""
-
-            <div class="vg-kpi-label">{rotulo}</div>
-
-            <div class="vg-kpi-value">{valor}</div>
-
-            <div class="vg-kpi-note">{nota}</div>
-
-        """, unsafe_allow_html=True)
+        st.markdown(
+            f'<div class="vg-kpi-label" title="{explicacao_segura}">{rotulo_seguro} ⓘ</div>',
+            unsafe_allow_html=True,
+        )
+        st.markdown(f'<div class="vg-kpi-value">{valor}</div>', unsafe_allow_html=True)
+        classe = variacao.get("classe", "neutral")
+        texto = variacao.get("texto", "Sem comparação anual")
+        st.markdown(
+            f'<div class="vg-kpi-trend {classe}">{escape(texto)}</div>',
+            unsafe_allow_html=True,
+        )
 
 def _titulo_secao(texto):
 
@@ -311,6 +372,10 @@ def _render_conteudo():
 
     anos = sorted(df["Ano_Numero"].dropna().unique().astype(int).tolist())
     cenarios = sorted(df["Cenario"].dropna().astype(str).unique().tolist())
+    # Os nomes originais são preservados para filtrar os dados; na interface,
+    # exibimos nomes simples e sequenciais para facilitar a leitura.
+    mapa_cenarios = {original: f"Cenário {i + 1}" for i, original in enumerate(cenarios)}
+    mapa_cenarios_inverso = {nome_exibicao: original for original, nome_exibicao in mapa_cenarios.items()}
 
     if not anos or not cenarios:
         st.warning("Não há anos ou cenários disponíveis para selecionar.")
@@ -322,12 +387,8 @@ def _render_conteudo():
     saudacao = f"Olá, {primeiro_nome}! 👋" if primeiro_nome else "Olá! 👋"
 
     # 1. Topo: saudação + filtros + botão.
-    opcoes_cenario = ["Todos os cenários"] + cenarios
-    indice_cenario = (
-        opcoes_cenario.index("Cenário Base")
-        if "Cenário Base" in opcoes_cenario
-        else 0
-    )
+    opcoes_cenario = ["Todos os cenários"] + list(mapa_cenarios.values())
+    indice_cenario = 0
 
     with st.container(key="vg_topo"):
         titulo, filtro_ano, filtro_cenario, botao = st.columns(
@@ -364,12 +425,21 @@ def _render_conteudo():
             )
 
         with botao:
-            # TODO: ligar à navegação do simulador (ex.: st.switch_page ou session_state).
-            st.button("＋  Nova simulação", key="vg_nova_simulacao")
+            if st.button("＋  Nova simulação", key="vg_nova_simulacao", use_container_width=True):
+                caminho_simulador = Path(__file__).resolve().parent / "simulador.py"
+                if caminho_simulador.is_file():
+                    st.switch_page("pages/simulador.py")
+                else:
+                    st.error(
+                        "Não encontrei pages/simulador.py. Ajuste o caminho do botão "
+                        "para o arquivo real da página de simulação."
+                    )
 
     # Mantém os nomes usados pelo restante da página, sem alterar os cálculos existentes.
     ano_selecionado = ano
-    cenario_selecionado = cenario
+    # Valor original usado nos filtros, sem alterar a base de dados.
+    cenario_selecionado = mapa_cenarios_inverso.get(cenario, cenario)
+    cenario_exibicao = cenario
 
     # 3. Aplica os filtros escolhidos.
 
@@ -401,7 +471,7 @@ def _render_conteudo():
 
         f'<div class="vg-referencia">Referência: Ano {ano_selecionado} | '
 
-        f"{cenario_selecionado} | {descricao_calculo}</div>",
+        f"{escape(cenario_exibicao)} | {descricao_calculo}</div>",
 
         unsafe_allow_html=True,
 
@@ -426,6 +496,42 @@ def _render_conteudo():
             return valores.mean()
 
         return valores.iloc[0]
+
+    def obter_variacao_anual(coluna, explicacao, formato="numero", maior_eh_melhor=True):
+        """Compara o valor do ano selecionado com o ano imediatamente anterior."""
+        anos_anteriores = [a for a in anos if a < ano_selecionado]
+        if not anos_anteriores or coluna not in df.columns:
+            return {"classe": "neutral", "texto": "— sem ano anterior"}
+
+        ano_anterior = max(anos_anteriores)
+        anterior_df = df[df["Ano_Numero"] == ano_anterior].copy()
+        if cenario_selecionado != "Todos os cenários":
+            anterior_df = anterior_df[anterior_df["Cenario"].astype(str) == cenario_selecionado]
+        atual = obter_valor(coluna)
+        anteriores = pd.to_numeric(anterior_df[coluna], errors="coerce").dropna()
+        anterior = anteriores.mean() if cenario_selecionado == "Todos os cenários" and not anteriores.empty else (anteriores.iloc[0] if not anteriores.empty else float("nan"))
+
+        if pd.isna(atual) or pd.isna(anterior):
+            return {"classe": "neutral", "texto": "— dados insuficientes para comparar"}
+        diferenca = float(atual) - float(anterior)
+        if formato == "percentual":
+            numero = f"{abs(diferenca) * 100:.2f} p.p.".replace(".", ",")
+        elif abs(float(anterior)) > 1e-12:
+            percentual = abs(diferenca / abs(float(anterior))) * 100
+            numero = f"{percentual:.1f}%".replace(".", ",")
+        elif formato == "moeda":
+            numero = formatar_moeda(abs(diferenca))
+        else:
+            numero = f"{abs(diferenca):.2f}".replace(".", ",")
+        sufixo = " vs. ano anterior"
+
+        if abs(diferenca) < 1e-12:
+            return {"classe": "neutral", "texto": "• Estável vs. ano anterior"}
+        subiu = diferenca > 0
+        seta = "↑" if subiu else "↓"
+        # Verde/vermelho indicam direção da variação; a seta não afirma, por si só, melhora ou piora.
+        classe = "positive" if subiu else "negative"
+        return {"classe": classe, "texto": f"{seta} {numero}{sufixo}"}
 
     def obter_ultimo_ano_disponivel(coluna):
 
@@ -458,8 +564,8 @@ def _render_conteudo():
             "EBITDA médio",
 
             formatar_moeda(obter_valor("EBITDA")),
-
-            "Resultado antes de juros, impostos, depreciação e amortização.",
+            obter_variacao_anual("EBITDA", "", "moeda"),
+            "EBITDA: resultado operacional antes de juros, impostos, depreciação e amortização.",
 
         )
 
@@ -472,8 +578,8 @@ def _render_conteudo():
             "Margem EBITDA",
 
             formatar_percentual(obter_valor("Margem EBITDA")),
-
-            "Margem conforme calculada na base.",
+            obter_variacao_anual("Margem EBITDA", "", "percentual"),
+            "Margem EBITDA: percentual da receita que resta após os custos e despesas operacionais considerados no cálculo do EBITDA.",
 
         )
 
@@ -486,8 +592,8 @@ def _render_conteudo():
             "Margem Líquida",
 
             formatar_percentual(obter_valor("Margem Líquida")),
-
-            "Margem conforme calculada na base.",
+            obter_variacao_anual("Margem Líquida", "", "percentual"),
+            "Margem líquida: parcela da receita que permanece como lucro líquido após despesas, resultado financeiro e impostos.",
 
         )
 
@@ -500,8 +606,8 @@ def _render_conteudo():
             "NOPAT",
 
             formatar_moeda(obter_valor("NOPAT")),
-
-            "Lucro operacional após impostos, conforme a base.",
+            obter_variacao_anual("NOPAT", "", "moeda"),
+            "NOPAT: lucro operacional após impostos, antes dos efeitos do financiamento.",
 
         )
 
@@ -520,8 +626,8 @@ def _render_conteudo():
             "Liquidez Corrente (LC)",
 
             formatar_numero(obter_valor("LC")),
-
-            "Indicador de liquidez disponível na base.",
+            obter_variacao_anual("LC", "", "numero"),
+            "Liquidez corrente: relação entre ativos circulantes e passivos circulantes; indica a cobertura das obrigações de curto prazo.",
 
         )
 
@@ -534,8 +640,8 @@ def _render_conteudo():
             "ROIC",
 
             formatar_percentual(obter_valor("ROIC")),
-
-            "Retorno sobre o capital investido, conforme a base.",
+            obter_variacao_anual("ROIC", "", "percentual"),
+            "ROIC: retorno sobre o capital investido; avalia o retorno operacional gerado pelo capital empregado no negócio.",
 
         )
 
@@ -548,8 +654,8 @@ def _render_conteudo():
             "EVA",
 
             formatar_moeda(obter_valor("EVA")),
-
-            "Valor econômico agregado, conforme a base.",
+            obter_variacao_anual("EVA", "", "moeda"),
+            "EVA: valor econômico agregado, que estima a riqueza gerada após considerar o custo do capital investido.",
 
         )
 
@@ -562,236 +668,161 @@ def _render_conteudo():
             "WACC",
 
             formatar_percentual(obter_valor("WACC")),
-
-            "Custo médio ponderado de capital, conforme a base.",
-
-        )
-
-    historico = df.copy()
-
-    if cenario_selecionado != "Todos os cenários":
-
-        historico = historico[
-
-            historico["Cenario"].astype(str) == cenario_selecionado
-
-        ]
-
-    col_ebitda, col_margens = st.columns(2, gap="medium")
-
-    # 7. Evolução do EBITDA médio por ano.
-
-    with col_ebitda, st.container(key="vg_grafico_ebitda"):
-
-        _titulo_cartao(
-
-            "Evolução do EBITDA",
-
-            "Média anual do EBITDA entre os cenários disponíveis, "
-
-            "ou a evolução do cenário selecionado.",
+            obter_variacao_anual("WACC", "", "percentual"),
+            "WACC: custo médio ponderado de capital; representa o custo médio das fontes de financiamento da empresa.",
 
         )
 
-        if "EBITDA" in historico.columns:
-
-            serie_ebitda = (
-
-                historico.groupby("Ano_Numero")["EBITDA"]
-
-                .mean()
-
-                .dropna()
-
-                .sort_index()
-
-            )
-
-            if not serie_ebitda.empty:
-
-                # O ano fica numérico: como texto ("Ano 10") o gráfico
-
-                # ordenaria alfabeticamente (Ano 1, Ano 10, Ano 11, Ano 2...)
-
-                grafico_ebitda = px.line(
-
-                    serie_ebitda.rename("EBITDA").reset_index(),
-
-                    x="Ano_Numero",
-
-                    y="EBITDA",
-
-                    markers=True,
-
-                    template="plotly_white",
-
-                    labels={
-
-                        "Ano_Numero": "Ano",
-
-                        "EBITDA": "EBITDA (R$)",
-
-                    },
-
-                )
-
-                grafico_ebitda.update_traces(
-
-                    line=dict(color="#1677E8", width=3),
-
-                    marker=dict(size=7),
-
-                    hovertemplate="Ano %{x}<br>EBITDA: R$ %{y:,.2f}<extra></extra>",
-
-                )
-
-                grafico_ebitda.update_layout(
-
-                    height=320,
-
-                    margin=dict(l=12, r=12, t=12, b=12),
-
-                    hovermode="x unified",
-
-                    showlegend=False,
-
-                    paper_bgcolor="rgba(0,0,0,0)",
-
-                    plot_bgcolor="rgba(0,0,0,0)",
-
-                    font=dict(family="Arial", color="#52647A", size=11),
-
-                    xaxis=dict(showgrid=False, dtick=1),
-
-                    yaxis=dict(
-
-                        gridcolor="#EAF0F6",
-
-                        zeroline=False,
-
-                        tickformat=",.2s",
-
-                    ),
-
-                )
-
-                st.plotly_chart(
-
-                    grafico_ebitda,
-
-                    use_container_width=True,
-
-                    config={"displayModeBar": False, "responsive": True},
-
-                )
-
-    # 8. Evolução das margens.
-
-    with col_margens, st.container(key="vg_grafico_margens"):
-
-        _titulo_cartao(
-
-            "Evolução das margens",
-
-            "Valores percentuais conforme registrados na base; "
-
-            "não representam necessariamente a margem de uma única empresa.",
-
-        )
-
-        colunas_margens = ["Margem EBITDA", "Margem Líquida"]
-
-        if all(coluna in historico.columns for coluna in colunas_margens):
-
-            serie_margens = (
-
-                historico.groupby("Ano_Numero")[colunas_margens]
-
-                .mean()
-
-                .sort_index()
-
-                * 100
-
-            )
-
-            serie_margens = serie_margens.dropna(how="all")
-
-            if not serie_margens.empty:
-
-                serie_margens = serie_margens.rename(
-
-                    columns={
-
-                        "Margem EBITDA": "Margem EBITDA (%)",
-
-                        "Margem Líquida": "Margem Líquida (%)",
-
-                    }
-
-                )
-
-                grafico_margens = px.line(
-                    serie_margens.reset_index(),
-                    x="Ano_Numero",
-                    y=list(serie_margens.columns),
-                    markers=True,
-                    template="plotly_white",
-                    labels={
-                        "Ano_Numero": "Ano",
-                        "value": "Margem (%)",
-                        "variable": "Indicador",
-                    },
-                    color_discrete_sequence=["#1677E8", "#58B99A"],
-                )
-
-                grafico_margens.update_traces(
-                    line=dict(width=3),
-                    marker=dict(size=6),
-                    hovertemplate=(
-                        "Ano %{x}<br>%{fullData.name}: %{y:.2f}%"
-                        "<extra></extra>"
-                    ),
-                )
-
-                grafico_margens.update_layout(
-                    height=300,
-                    margin=dict(l=12, r=12, t=24, b=12),
-                    hovermode="x unified",
-                    legend=dict(
-                        orientation="h",
-                        yanchor="bottom",
-                        y=1.02,
-                        xanchor="left",
-                        x=0,
-                    ),
-                    paper_bgcolor="rgba(0,0,0,0)",
-                    plot_bgcolor="rgba(0,0,0,0)",
-                    font=dict(family="Arial", color="#52647A", size=11),
-                    xaxis=dict(showgrid=False, dtick=1),
-                    yaxis=dict(
-                        title="Margem (%)",
-                        ticksuffix="%",
-                        gridcolor="#EAF0F6",
-                        zeroline=False,
-                    ),
-                )
-
-                st.plotly_chart(
-                    grafico_margens,
-                    use_container_width=True,
-                    config={"displayModeBar": False, "responsive": True},
-                )
-
-            else:
-
-                st.info("Não há dados de margens disponíveis para o gráfico.")
-
+    # 7. Resumo executivo: leituras descritivas derivadas dos dados disponíveis.
+    _titulo_secao("Leitura executiva")
+    st.caption("Destaques calculados automaticamente para o período e cenário selecionados; são comparações descritivas, não metas nem previsões.")
+
+    metricas_destaque = [
+        ("EBITDA", "EBITDA", "moeda"),
+        ("Margem EBITDA", "Margem EBITDA", "percentual"),
+        ("ROIC", "ROIC", "percentual"),
+        ("EVA", "EVA", "moeda"),
+    ]
+    destaques = []
+    for coluna, nome_indicador, formato in metricas_destaque:
+        if coluna not in df.columns:
+            continue
+        atual = obter_valor(coluna)
+        variacao = obter_variacao_anual(coluna, "", formato)
+        if pd.isna(atual):
+            valor_texto = "Sem dados"
+            nota = "Não há valor disponível no recorte atual."
         else:
+            valor_texto = formatar_percentual(atual) if formato == "percentual" else formatar_moeda(atual)
+            nota = variacao.get("texto", "Sem comparação anual")
+        destaques.append((nome_indicador, valor_texto, nota))
 
-            st.info("As colunas necessárias para o gráfico de margens não existem.")
+    if destaques:
+        colunas_destaque = st.columns(len(destaques), gap="medium")
+        for coluna_ui, (rotulo, valor_texto, nota) in zip(colunas_destaque, destaques):
+            with coluna_ui:
+                st.markdown(
+                    '<div class="vg-insight-card">'
+                    f'<div class="vg-insight-label">{escape(rotulo)}</div>'
+                    f'<div class="vg-insight-value">{escape(valor_texto)}</div>'
+                    f'<div class="vg-insight-note">{escape(nota)}</div>'
+                    '</div>',
+                    unsafe_allow_html=True,
+                )
 
-    # 9. Ressalvas e transparência dos dados.
+    # Cobertura da base para contextualizar a leitura dos indicadores.
+    _titulo_secao("Visão da base")
+    anos_base = sorted(df["Ano_Numero"].dropna().astype(int).unique().tolist())
+    cenarios_base = sorted(df["Cenario"].dropna().astype(str).unique().tolist())
+    cobertura_cols = st.columns(3, gap="medium")
+    with cobertura_cols[0]:
+        st.metric("Anos disponíveis", len(anos_base))
+    with cobertura_cols[1]:
+        st.metric("Cenários disponíveis", len(cenarios_base))
+    with cobertura_cols[2]:
+        st.metric("Registros na base", f"{len(df):,}".replace(",", "."))
+
+    # 8. Evolução anual de EBITDA e Margem EBITDA.
+    # Os gráficos comparam anos, aplicando o filtro de cenário selecionado.
+    historico_base = df.copy()
+    if cenario_selecionado != "Todos os cenários":
+        historico_base = historico_base[historico_base["Cenario"].astype(str) == cenario_selecionado]
+
+    _titulo_secao("Evolução anual do desempenho")
+    st.caption(
+        "Compare como os indicadores mudaram ao longo dos anos. "
+        "Com 'Todos os cenários', cada ponto representa a média dos valores disponíveis entre os cenários. "
+        "Ao selecionar um cenário, o gráfico mostra apenas esse cenário."
+    )
+    col_ebitda_ano, col_margem_ano = st.columns(2, gap="medium")
+
+    with col_ebitda_ano, st.container(key="vg_grafico_ebitda_anos"):
+        _titulo_cartao("Evolução do EBITDA", "Resultado operacional por ano (R$).")
+        if "EBITDA" in historico_base.columns:
+            serie_ebitda = historico_base.groupby("Ano_Numero")["EBITDA"].mean().dropna().sort_index()
+            if not serie_ebitda.empty:
+                fig_ebitda_anos = px.line(
+                    x=serie_ebitda.index.astype(int), y=serie_ebitda.values,
+                    markers=True, template="plotly_white",
+                    labels={"x": "Ano", "y": "EBITDA (R$)"},
+                )
+                fig_ebitda_anos.update_traces(
+                    line=dict(color="#1677E8", width=3), marker=dict(size=7),
+                    hovertemplate="Ano %{x}<br>EBITDA: R$ %{y:,.2f}<extra></extra>",
+                )
+                fig_ebitda_anos.update_layout(
+                    height=320, margin=dict(l=8, r=8, t=18, b=8),
+                    paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
+                    font=dict(family="Arial", color="#52647A", size=11),
+                    xaxis=dict(title="Ano", showgrid=False, dtick=1),
+                    yaxis=dict(title="EBITDA (R$)", gridcolor="#EAF0F6", tickformat=",.2s"),
+                )
+                st.plotly_chart(fig_ebitda_anos, use_container_width=True, config={"displayModeBar": False, "responsive": True})
+            else:
+                st.info("Não há dados de EBITDA suficientes para comparar os anos.")
+        else:
+            st.info("A base não contém a coluna EBITDA.")
+
+    with col_margem_ano, st.container(key="vg_grafico_margem_anos"):
+        _titulo_cartao("Evolução da Margem EBITDA", "Percentual da receita que corresponde ao EBITDA.")
+        if "Margem EBITDA" in historico_base.columns:
+            serie_margem = historico_base.groupby("Ano_Numero")["Margem EBITDA"].mean().dropna().sort_index() * 100
+            if not serie_margem.empty:
+                fig_margem_anos = px.line(
+                    x=serie_margem.index.astype(int), y=serie_margem.values,
+                    markers=True, template="plotly_white",
+                    labels={"x": "Ano", "y": "Margem EBITDA (%)"},
+                )
+                fig_margem_anos.update_traces(
+                    line=dict(color="#58B99A", width=3), marker=dict(size=7),
+                    hovertemplate="Ano %{x}<br>Margem EBITDA: %{y:.2f}%<extra></extra>",
+                )
+                fig_margem_anos.update_layout(
+                    height=320, margin=dict(l=8, r=8, t=18, b=8),
+                    paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
+                    font=dict(family="Arial", color="#52647A", size=11),
+                    xaxis=dict(title="Ano", showgrid=False, dtick=1),
+                    yaxis=dict(title="Margem EBITDA (%)", gridcolor="#EAF0F6", ticksuffix="%"),
+                )
+                st.plotly_chart(fig_margem_anos, use_container_width=True, config={"displayModeBar": False, "responsive": True})
+            else:
+                st.info("Não há dados de Margem EBITDA suficientes para comparar os anos.")
+        else:
+            st.info("A base não contém a coluna Margem EBITDA.")
+
+    # 9. Evolução de retorno e custo de capital ao longo do tempo.
+    _titulo_secao("Retorno e custo de capital ao longo do tempo")
+    col_retorno, col_valor = st.columns(2, gap="medium")
+    with col_retorno, st.container(key="vg_grafico_retorno"):
+        _titulo_cartao("ROIC e WACC", "Indicadores percentuais para comparar retorno do capital e custo de financiamento.")
+        if all(c in historico_base.columns for c in ["ROIC", "WACC"]):
+            retorno = historico_base.groupby("Ano_Numero")[["ROIC", "WACC"]].mean().sort_index() * 100
+            retorno = retorno.rename(columns={"ROIC": "ROIC (%)", "WACC": "WACC (%)"}).dropna(how="all")
+            if not retorno.empty:
+                fig_retorno = px.line(retorno.reset_index(), x="Ano_Numero", y=["ROIC (%)", "WACC (%)"], color_discrete_sequence=["#1677E8", "#E7A23B"], markers=True, template="plotly_white", labels={"Ano_Numero":"Ano", "value":"Percentual", "variable":"Indicador"})
+                fig_retorno.update_layout(height=320, margin=dict(l=8,r=8,t=18,b=8), hovermode="x unified", paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", font=dict(family="Arial",color="#52647A",size=11), xaxis=dict(showgrid=False,dtick=1), yaxis=dict(gridcolor="#EAF0F6",ticksuffix="%"), legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="left", x=0))
+                fig_retorno.update_traces(line=dict(width=3), marker=dict(size=6), hovertemplate="Ano %{x}<br>%{fullData.name}: %{y:.2f}%<extra></extra>")
+                st.plotly_chart(fig_retorno, use_container_width=True, config={"displayModeBar": False, "responsive": True})
+            else:
+                st.info("Não há dados suficientes de ROIC e WACC para montar a evolução.")
+        else:
+            st.info("A base não contém as colunas ROIC e WACC necessárias para este gráfico.")
+    with col_valor, st.container(key="vg_grafico_eva_nopat"):
+        _titulo_cartao("EVA e NOPAT", "Indicadores monetários para acompanhar resultado operacional após impostos e valor econômico agregado.")
+        if all(c in historico_base.columns for c in ["EVA", "NOPAT"]):
+            valores = historico_base.groupby("Ano_Numero")[["EVA", "NOPAT"]].mean().sort_index()
+            valores = valores.rename(columns={"EVA": "EVA", "NOPAT": "NOPAT"}).dropna(how="all")
+            if not valores.empty:
+                fig_valores = px.line(valores.reset_index(), x="Ano_Numero", y=["EVA", "NOPAT"], color_discrete_sequence=["#58B99A", "#6D6AE8"], markers=True, template="plotly_white", labels={"Ano_Numero":"Ano", "value":"Valor (R$)", "variable":"Indicador"})
+                fig_valores.update_layout(height=320, margin=dict(l=8,r=8,t=18,b=8), hovermode="x unified", paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", font=dict(family="Arial",color="#52647A",size=11), xaxis=dict(showgrid=False,dtick=1), yaxis=dict(gridcolor="#EAF0F6",tickformat=",.2s"), legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="left", x=0))
+                fig_valores.update_traces(line=dict(width=3), marker=dict(size=6), hovertemplate="Ano %{x}<br>%{fullData.name}: R$ %{y:,.2f}<extra></extra>")
+                st.plotly_chart(fig_valores, use_container_width=True, config={"displayModeBar": False, "responsive": True})
+            else:
+                st.info("Não há dados suficientes de EVA e NOPAT para montar a evolução.")
+        else:
+            st.info("A base não contém as colunas EVA e NOPAT necessárias para este gráfico.")
+
+    # 10. Ressalvas e transparência dos dados.
 
     with st.container(key="vg_qualidade"):
 
