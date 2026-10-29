@@ -8,6 +8,7 @@ from pages.insights import render_insights
 from pages.regressao import render_regressao
 from pages.visao_geral import render_visao_geral
 from pages.configuracoes import render_configuracoes
+from pages.ranking import render_ranking
 
 
 
@@ -80,6 +81,9 @@ elif pagina == "Insights":
 
 elif pagina == "Configurações":
     render_configuracoes()
+
+elif pagina == "Ranking":
+    render_ranking()
 
 else:
     st.title(pagina)
