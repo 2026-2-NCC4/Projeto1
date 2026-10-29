@@ -9,6 +9,7 @@ from pages.regressao import render_regressao
 from pages.visao_geral import render_visao_geral
 from pages.configuracoes import render_configuracoes
 from pages.ranking import render_ranking
+from pages.comparacao import render_comparacao
 
 
 
@@ -84,6 +85,9 @@ elif pagina == "Configurações":
 
 elif pagina == "Ranking":
     render_ranking()
+
+elif pagina == "Comparação":
+    render_comparacao()
 
 else:
     st.title(pagina)
