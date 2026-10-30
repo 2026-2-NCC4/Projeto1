@@ -1,15 +1,15 @@
-
 from pathlib import Path
 import streamlit as st
 from components.auth import render_auth_page, usuario_logado
 from components.sidebar import render_sidebar
 from components.header import render_header
-from pages.insights import render_insights
-from pages.regressao import render_regressao
 from pages.visao_geral import render_visao_geral
+from pages.indicadores import render_indicadores
 from pages.configuracoes import render_configuracoes
 from pages.ranking import render_ranking
 from pages.comparacao import render_comparacao
+from pages.insights import render_insights
+from pages.regressao import render_regressao
 
 
 
@@ -73,6 +73,9 @@ render_header(pagina)
 # Exibe a página selecionada
 if pagina == "Visão Geral":
     render_visao_geral()
+
+elif pagina == "Indicadores":
+    render_indicadores()
 
 elif pagina == "Regressão":
     render_regressao()
