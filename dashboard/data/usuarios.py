@@ -52,6 +52,14 @@ def _conectar():
                     tentativas INTEGER NOT NULL DEFAULT 0
                 )
             """)
+            # Preferências escolhidas na página de Configurações
+            conexao.execute("""
+                CREATE TABLE IF NOT EXISTS preferencias (
+                    usuario_id INTEGER PRIMARY KEY,
+                    pagina_inicial TEXT,
+                    menu_recolhido INTEGER NOT NULL DEFAULT 0
+                )
+            """)
             yield conexao
     finally:
         conexao.close()
@@ -239,3 +247,97 @@ def redefinir_senha(email, codigo, senha, confirmar):
             (gerar_hash(senha), email),
         )
         conexao.execute("DELETE FROM redefinicoes_senha WHERE email = ?", (email,))
+
+
+# ---------- Configurações da conta ----------
+
+def obter_usuario(usuario_id):
+    """Dados públicos do usuário, com a data de cadastro. None se não existir."""
+    with _conectar() as conexao:
+        linha = conexao.execute(
+            "SELECT id, nome, email, criado_em FROM usuarios WHERE id = ?",
+            (usuario_id,),
+        ).fetchone()
+
+    return dict(linha) if linha else None
+
+
+def atualizar_nome(usuario_id, nome):
+    nome = nome.strip()
+
+    if len(nome) < 3:
+        raise ErroCadastro("Informe seu nome completo.")
+
+    with _conectar() as conexao:
+        conexao.execute("UPDATE usuarios SET nome = ? WHERE id = ?", (nome, usuario_id))
+
+    return nome
+
+
+def _confere_senha_atual(conexao, usuario_id, senha):
+    linha = conexao.execute(
+        "SELECT senha_hash FROM usuarios WHERE id = ?", (usuario_id,)
+    ).fetchone()
+
+    if linha is None or not verificar_senha(senha, linha["senha_hash"]):
+        raise ErroCadastro("Senha atual incorreta.")
+
+
+def alterar_senha(usuario_id, senha_atual, nova, confirmar):
+    if not senha_atual:
+        raise ErroCadastro("Informe a senha atual.")
+
+    validar_senha(nova, confirmar)
+
+    if nova == senha_atual:
+        raise ErroCadastro("A nova senha deve ser diferente da atual.")
+
+    with _conectar() as conexao:
+        _confere_senha_atual(conexao, usuario_id, senha_atual)
+        conexao.execute(
+            "UPDATE usuarios SET senha_hash = ? WHERE id = ?",
+            (gerar_hash(nova), usuario_id),
+        )
+
+
+def excluir_conta(usuario_id, senha):
+    """Apaga o usuário e tudo ligado a ele. Pede a senha como confirmação."""
+    if not senha:
+        raise ErroCadastro("Informe sua senha para confirmar.")
+
+    with _conectar() as conexao:
+        _confere_senha_atual(conexao, usuario_id, senha)
+        email = conexao.execute(
+            "SELECT email FROM usuarios WHERE id = ?", (usuario_id,)
+        ).fetchone()["email"]
+
+        conexao.execute("DELETE FROM preferencias WHERE usuario_id = ?", (usuario_id,))
+        conexao.execute("DELETE FROM redefinicoes_senha WHERE email = ?", (email,))
+        conexao.execute("DELETE FROM usuarios WHERE id = ?", (usuario_id,))
+
+
+def obter_preferencias(usuario_id):
+    with _conectar() as conexao:
+        linha = conexao.execute(
+            "SELECT pagina_inicial, menu_recolhido FROM preferencias WHERE usuario_id = ?",
+            (usuario_id,),
+        ).fetchone()
+
+    if linha is None:
+        return {"pagina_inicial": None, "menu_recolhido": False}
+
+    return {
+        "pagina_inicial": linha["pagina_inicial"],
+        "menu_recolhido": bool(linha["menu_recolhido"]),
+    }
+
+
+def salvar_preferencias(usuario_id, pagina_inicial, menu_recolhido):
+    with _conectar() as conexao:
+        conexao.execute(
+            """
+            INSERT OR REPLACE INTO preferencias (usuario_id, pagina_inicial, menu_recolhido)
+            VALUES (?, ?, ?)
+            """,
+            (usuario_id, pagina_inicial, int(menu_recolhido)),
+        )

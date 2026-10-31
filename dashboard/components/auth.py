@@ -14,6 +14,7 @@ from data.usuarios import (
     cadastrar_usuario,
     gerar_codigo_redefinicao,
     normalizar_email,
+    obter_preferencias,
     redefinir_senha,
 )
 
@@ -274,6 +275,13 @@ def usuario_logado():
 
 def _iniciar_sessao(usuario):
     st.session_state.usuario = usuario
+
+    # Preferências salvas em Configurações
+    preferencias = obter_preferencias(usuario["id"])
+    if preferencias["pagina_inicial"]:
+        st.session_state.pagina_atual = preferencias["pagina_inicial"]
+    st.session_state.sidebar_recolhido = preferencias["menu_recolhido"]
+
     st.session_state.pop("login_falhas", None)
     st.session_state.pop("login_bloqueado_ate", None)
     st.rerun()

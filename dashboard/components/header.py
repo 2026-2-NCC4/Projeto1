@@ -31,7 +31,10 @@ BUSCA_POR_PAGINA = {
         "Tendências": ["tendência", "tendencia", "evolução", "evolucao"],
     },
     "Configurações": {
-        "Perfil da conta": ["perfil", "conta", "usuário", "usuario", "email", "e-mail"],
+        "Perfil da conta": ["perfil", "conta", "usuário", "usuario", "email", "e-mail", "nome"],
+        "Senha": ["senha", "segurança", "seguranca", "alterar senha"],
+        "Preferências": ["preferência", "preferencia", "página inicial", "pagina inicial", "menu"],
+        "Excluir conta": ["excluir", "apagar", "deletar"],
     },
 }
 
@@ -51,8 +54,9 @@ AJUDA_POR_PAGINA = {
         "identificar tendências e pontos que merecem investigação."
     ),
     "Configurações": (
-        "Nesta página você consulta os dados básicos do perfil autenticado. "
-        "A edição de dados e as preferências ainda não estão disponíveis."
+        "Nesta página você edita seu nome, troca a senha, escolhe a página inicial "
+        "e se o menu lateral abre recolhido. Também é possível excluir a conta, "
+        "o que exige a sua senha."
     ),
 }
 
