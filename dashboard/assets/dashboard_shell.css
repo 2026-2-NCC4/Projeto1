@@ -27,9 +27,13 @@ html, body, .stApp {
     background: var(--cti-page);
 }
 
+/* O cabeçalho nativo do Streamlit é uma faixa invisível de 60px que fica
+   por cima do header da CTI e engolia os cliques nos botões de ajuda e perfil. */
 [data-testid="stHeader"] {
     background: transparent;
-    height: 0;
+    height: 0 !important;
+    min-height: 0 !important;
+    pointer-events: none !important;
 }
 
 [data-testid="stToolbar"] {
@@ -542,6 +546,25 @@ body:has(.cti-collapsed-marker) [data-testid="stSidebar"] .st-key-cti_nav_simula
 .st-key-cti_topbar .stButton button [data-testid="stIconMaterial"] {
     font-size: 24px !important;
     font-variation-settings: 'FILL' 0, 'wght' 400, 'opsz' 24;
+}
+
+/* Ajuda e resultados da busca: mesmo recuo do conteúdo das páginas */
+.st-key-cti_ajuda_box,
+.st-key-cti_busca_resultados {
+    padding: 18px 32px 0;
+    gap: 8px !important;
+}
+
+.st-key-cti_busca_resultados .stButton button[kind="secondary"] {
+    background: #fff;
+    border: 1px solid var(--cti-line);
+    border-radius: 10px;
+    color: var(--cti-blue);
+    font-weight: 600;
+}
+
+.st-key-cti_busca_resultados .stButton button[kind="secondary"]:hover {
+    border-color: var(--cti-blue);
 }
 
 
