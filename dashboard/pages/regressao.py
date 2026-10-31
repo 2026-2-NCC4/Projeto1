@@ -30,7 +30,9 @@ PREDITORES_PADRAO = ["Resultado Líquido", "Custos", "Investimentos"]
 # (ex.: Tributos é sempre a mesma fração da Receita).
 LIMITE_COLINEARIDADE = 0.9999
 
-TODOS_OS_ANOS = "Todos os anos"
+# O impacto de cada fator é mostrado como "se ele crescer 10%": assim fatores
+# de escalas diferentes ficam comparáveis, sem falar em coeficientes.
+VARIACAO_IMPACTO = 0.10
 
 PAGE_STYLE = """
 <style>
@@ -89,7 +91,7 @@ PAGE_STYLE = """
     .st-key-reg_kpi_r2,
     .st-key-reg_kpi_erro,
     .st-key-reg_kpi_obs,
-    .st-key-reg_coeficientes,
+    .st-key-reg_impactos,
     .st-key-reg_grafico {
         background: #fff;
         border: 1px solid #E1ECF7;
@@ -99,11 +101,11 @@ PAGE_STYLE = """
     }
 
     .st-key-reg_filtros {
-        padding: 12px 22px;
+        padding: 14px 22px;
     }
 
     .st-key-reg_filtros [data-testid="stHorizontalBlock"] {
-        align-items: center;
+        align-items: flex-start;
     }
 
     /* os chips quebram linha em vez de rolar para os lados */
@@ -134,13 +136,23 @@ PAGE_STYLE = """
     .reg-kpi-note {
         font-size: 11px;
         color: #8AA4BF;
+        line-height: 1.4;
     }
 
     .reg-card-title {
         font-size: 15px;
         font-weight: 700;
         color: var(--cti-text);
-        margin-bottom: 12px;
+    }
+
+    .reg-card-note {
+        font-size: 11.5px;
+        color: #8AA4BF;
+        margin: 2px 0 12px;
+    }
+
+    .reg-table-wrap {
+        overflow-x: auto;
     }
 
     .reg-table {
@@ -158,10 +170,6 @@ PAGE_STYLE = """
         padding: 10px 12px;
     }
 
-    .reg-table-wrap {
-        overflow-x: auto;
-    }
-
     .reg-table td {
         white-space: nowrap;
         padding: 12px;
@@ -173,15 +181,46 @@ PAGE_STYLE = """
         font-weight: 700;
     }
 
+    .reg-sobe { color: #2E8B6A; font-weight: 600; }
+    .reg-desce { color: #C2410C; font-weight: 600; }
+
+    .reg-conf {
+        display: inline-block;
+        padding: 2px 10px;
+        border-radius: 999px;
+        font-size: 11.5px;
+        font-weight: 600;
+    }
+
+    .reg-conf-alta { background: #E6F4EE; color: #1F7A57; }
+    .reg-conf-media { background: #FFF4DB; color: #8A5A00; }
+    .reg-conf-baixa { background: #F1F3F6; color: #5B6B7F; }
+
     .reg-chart-note {
-        font-size: 11px;
+        font-size: 11.5px;
         color: #8AA4BF;
         margin-top: 4px;
     }
 
+    .reg-destaque {
+        font-size: 12px;
+        color: var(--cti-text);
+        background: #FFF7E8;
+        border-radius: 8px;
+        padding: 8px 10px;
+        margin-top: 8px;
+    }
+
+    .reg-glossario {
+        font-size: 12px;
+        color: var(--cti-muted);
+        line-height: 1.6;
+        margin-top: 10px;
+    }
+
     .reg-insight {
         display: flex;
-        align-items: center;
+        align-items: flex-start;
         gap: 16px;
         background: #EEF5FC;
         border: 1px solid #DCEBFC;
@@ -205,15 +244,28 @@ PAGE_STYLE = """
         font-weight: 700;
     }
 
+    .reg-insight strong {
+        display: block;
+        margin-bottom: 2px;
+    }
+
     .reg-insight p {
         margin: 0;
+        line-height: 1.6;
     }
 
     .reg-insight .reg-alerta {
         display: block;
-        margin-top: 4px;
-        color: #9A6700;
+        margin-top: 6px;
+        color: #8A5A00;
         font-size: 12px;
+    }
+
+    .reg-insight .reg-ressalva {
+        display: block;
+        margin-top: 6px;
+        color: var(--cti-muted);
+        font-size: 11.5px;
     }
 </style>
 """
@@ -233,6 +285,11 @@ def _moeda_mi(valor):
     return f"R$ {_num(valor)} mi"
 
 
+def _moeda_sinal(valor):
+    """'+R$ 12,30 mi' / '−R$ 12,30 mi'."""
+    return ("+" if valor >= 0 else "−") + _moeda_mi(abs(valor))
+
+
 def _p_valor(p):
     # Vai dentro de HTML, então o "<" precisa ser escapado
     return "&lt; 0,001" if p < 0.001 else _num(p, 3)
@@ -240,10 +297,19 @@ def _p_valor(p):
 
 def _qualidade_ajuste(r2):
     if r2 >= 0.7:
-        return "Bom ajuste"
+        return "Explica bem"
     if r2 >= 0.4:
-        return "Ajuste moderado"
-    return "Ajuste fraco"
+        return "Explica em parte"
+    return "Explica pouco"
+
+
+def _confianca(p):
+    """Traduz o p-valor para quem não é da estatística."""
+    if p < 0.01:
+        return "Alta", "alta"
+    if p < 0.05:
+        return "Média", "media"
+    return "Baixa", "baixa"
 
 
 # ---------- Modelo ----------
@@ -327,25 +393,27 @@ def _topo(anos, cenarios):
                 <div class="reg-eyebrow">PAINEL FINANCEIRO</div>
                 <div class="reg-title">Regressão</div>
                 <div class="reg-subtitle">
-                    Explore dados, cenários e recomendações para apoiar decisões.
+                    Descubra quais fatores mais influenciam um resultado financeiro
+                    nos 1.200 cenários simulados.
                 </div>
             """, unsafe_allow_html=True)
 
         with col_ano:
             ano = st.selectbox(
-                "Ano",
-                options=[TODOS_OS_ANOS] + anos,
-                index=len(anos),
-                format_func=lambda a: a if a == TODOS_OS_ANOS else f"Ano {a}",
+                "Ano analisado",
+                options=anos,
+                index=len(anos) - 1,
+                format_func=lambda a: f"Ano {a}",
                 key="reg_ano",
             )
 
         with col_cenario:
             cenario = st.selectbox(
-                "Cenário",
+                "Destacar cenário",
                 options=cenarios,
                 format_func=lambda c: f"Cenário {c}",
                 key="reg_cenario",
+                help="Mostra onde esse cenário aparece no gráfico Previsto × Real.",
             )
 
         with col_botao:
@@ -363,11 +431,11 @@ def _topo(anos, cenarios):
 
 def _filtros():
     with st.container(key="reg_filtros"):
-        col_dep, col_pred = st.columns([1.2, 4], vertical_alignment="center")
+        col_dep, col_pred = st.columns([1.2, 4])
 
         with col_dep:
             dependente = st.selectbox(
-                "Variável dependente",
+                "1. O que você quer explicar?",
                 options=list(VARIAVEIS),
                 index=list(VARIAVEIS).index(DEPENDENTE_PADRAO),
                 key="reg_dependente",
@@ -376,10 +444,10 @@ def _filtros():
         opcoes = [nome for nome in VARIAVEIS if nome != dependente]
 
         with col_pred:
-            # A key muda com a dependente para não manter um preditor
+            # A key muda com a escolha anterior para não manter um fator
             # que deixou de ser opção válida.
             preditores = st.pills(
-                "Preditores",
+                "2. Quais fatores podem influenciar esse resultado?",
                 options=opcoes,
                 selection_mode="multi",
                 default=[p for p in PREDITORES_PADRAO if p in opcoes],
@@ -387,6 +455,22 @@ def _filtros():
             )
 
     return dependente, list(preditores or [])
+
+
+def _como_ler():
+    with st.expander("Como ler esta análise", icon=":material/menu_book:"):
+        st.markdown(
+            "- **Cada cenário simulado é uma observação.** A análise compara os "
+            "1.200 cenários do ano escolhido para ver o que anda junto com o resultado.\n"
+            "- **Impacto de cada fator:** quanto o resultado muda, em média, quando "
+            "o fator cresce 10% e os outros fatores ficam iguais. Para Custos, Tributos "
+            "e Investimentos, que são saídas de dinheiro, crescer significa gastar mais.\n"
+            "- **Confiança:** indica se o efeito é consistente nos dados (Alta) "
+            "ou se pode ser só acaso (Baixa).\n"
+            "- **Previsto × Real:** quanto mais perto da linha verde estiverem os "
+            "pontos, melhor o modelo acerta.\n"
+            "- A análise mostra **associação**, não prova que um fator **causa** o outro."
+        )
 
 
 def _kpi(key, rotulo, valor, nota):
@@ -398,31 +482,34 @@ def _kpi(key, rotulo, valor, nota):
         """, unsafe_allow_html=True)
 
 
-def _tabela_coeficientes(preditores, modelo):
-    linhas = "".join(
-        f"""
-        <tr>
-            <td>{nome}</td>
-            <td>{_num(modelo["coef"][i])}</td>
-            <td>{_num(modelo["erro_padrao"][i])}</td>
-            <td>{_p_valor(modelo["p"][i])}</td>
-            <td>{_num(modelo["ic_inf"][i])} – {_num(modelo["ic_sup"][i])}</td>
-        </tr>
-        """
-        for i, nome in enumerate(preditores)
-    )
+def _tabela_impactos(dependente, fatores):
+    linhas = ""
+
+    for fator in fatores:
+        classe = "reg-sobe" if fator["impacto"] >= 0 else "reg-desce"
+        seta = "▲" if fator["impacto"] >= 0 else "▼"
+        rotulo, classe_conf = _confianca(fator["p"])
+        # Linha única: no markdown, HTML recuado depois de linha em branco vira bloco de código
+        linhas += (
+            f'<tr><td>{fator["nome"]}</td>'
+            f'<td><span class="{classe}">{seta} {_moeda_sinal(fator["impacto"])}</span></td>'
+            f'<td><span class="reg-conf reg-conf-{classe_conf}">{rotulo}</span></td></tr>'
+        )
 
     st.markdown(f"""
-        <div class="reg-card-title">Coeficientes do modelo</div>
+        <div class="reg-card-title">Impacto de cada fator</div>
+        <div class="reg-card-note">
+            Quanto {dependente} muda, em média, se o fator crescer
+            {VARIACAO_IMPACTO:.0%} e os demais ficarem iguais.
+            Do maior para o menor impacto.
+        </div>
         <div class="reg-table-wrap">
         <table class="reg-table">
             <thead>
                 <tr>
-                    <th>Variável</th>
-                    <th>Coeficiente</th>
-                    <th>Erro padrão</th>
-                    <th>p-valor</th>
-                    <th>IC 95%</th>
+                    <th>Fator</th>
+                    <th>Se o fator crescer {VARIACAO_IMPACTO:.0%}…</th>
+                    <th>Confiança</th>
                 </tr>
             </thead>
             <tbody>{linhas}</tbody>
@@ -431,25 +518,57 @@ def _tabela_coeficientes(preditores, modelo):
     """, unsafe_allow_html=True)
 
 
-def _grafico(observado, previsto, cenarios, cenario_destacado, dependente):
+def _detalhes_tecnicos(fatores):
+    with st.expander("Ver detalhes estatísticos"):
+        linhas = "".join(
+            f'<tr><td>{f["nome"]}</td>'
+            f'<td>{_num(f["coef"])}</td>'
+            f'<td>{_num(f["erro_padrao"])}</td>'
+            f'<td>{_p_valor(f["p"])}</td>'
+            f'<td>{_num(f["ic_inf"])} – {_num(f["ic_sup"])}</td></tr>'
+            for f in fatores
+        )
+
+        st.markdown(f"""
+            <div class="reg-table-wrap">
+            <table class="reg-table">
+                <thead>
+                    <tr>
+                        <th>Fator</th>
+                        <th>Coeficiente</th>
+                        <th>Erro padrão</th>
+                        <th>p-valor</th>
+                        <th>IC 95%</th>
+                    </tr>
+                </thead>
+                <tbody>{linhas}</tbody>
+            </table>
+            </div>
+            <div class="reg-glossario">
+                <b>Coeficiente:</b> variação do resultado, em R$ mi, a cada +R$ 1 mi no fator.<br>
+                <b>p-valor:</b> chance de o efeito ser só acaso. Abaixo de 0,01 a confiança é
+                Alta; entre 0,01 e 0,05, Média; acima de 0,05, Baixa.<br>
+                <b>IC 95%:</b> faixa em que o coeficiente verdadeiro provavelmente está.<br>
+                Modelo: regressão linear múltipla (mínimos quadrados), valores em R$ mi.
+            </div>
+        """, unsafe_allow_html=True)
+
+
+def _grafico(observado, previsto, cenarios, cenario_destacado):
     dados = pd.DataFrame({
-        "Observado": observado,
+        "Real": observado,
         "Previsto": previsto,
         "Cenario": cenarios,
     })
 
     destaque = dados[dados["Cenario"] == cenario_destacado]
 
-    # Muitos pontos deixam o gráfico pesado; uma amostra mostra o mesmo padrão
-    if len(dados) > 2000:
-        dados = dados.sample(2000, random_state=0)
-
-    minimo = float(min(dados["Observado"].min(), dados["Previsto"].min()))
-    maximo = float(max(dados["Observado"].max(), dados["Previsto"].max()))
+    minimo = float(min(dados["Real"].min(), dados["Previsto"].min()))
+    maximo = float(max(dados["Real"].max(), dados["Previsto"].max()))
     eixo = alt.Scale(domain=[minimo, maximo], nice=True, zero=False)
     tooltip = [
         alt.Tooltip("Cenario:Q", title="Cenário"),
-        alt.Tooltip("Observado:Q", format=",.1f", title="Observado (R$ mi)"),
+        alt.Tooltip("Real:Q", format=",.1f", title="Real (R$ mi)"),
         alt.Tooltip("Previsto:Q", format=",.1f", title="Previsto (R$ mi)"),
     ]
 
@@ -459,14 +578,14 @@ def _grafico(observado, previsto, cenarios, cenario_destacado, dependente):
     pontos = alt.Chart(dados).mark_circle(size=34, opacity=0.55, color="#4A90D9").encode(
         x=alt.X("Previsto:Q", scale=eixo, title="Previsto (R$ mi)",
                 axis=alt.Axis(labelExpr=rotulo, tickCount=5)),
-        y=alt.Y("Observado:Q", scale=eixo, title="Observado (R$ mi)",
+        y=alt.Y("Real:Q", scale=eixo, title="Real (R$ mi)",
                 axis=alt.Axis(labelExpr=rotulo, tickCount=5)),
         tooltip=tooltip,
     )
 
     linha = alt.Chart(
-        pd.DataFrame({"Previsto": [minimo, maximo], "Observado": [minimo, maximo]})
-    ).mark_line(color="#3E9C7A", strokeWidth=1.5).encode(x="Previsto:Q", y="Observado:Q")
+        pd.DataFrame({"Previsto": [minimo, maximo], "Real": [minimo, maximo]})
+    ).mark_line(color="#3E9C7A", strokeWidth=1.5).encode(x="Previsto:Q", y="Real:Q")
 
     camadas = [linha, pontos]
 
@@ -474,7 +593,7 @@ def _grafico(observado, previsto, cenarios, cenario_destacado, dependente):
         camadas.append(
             alt.Chart(destaque).mark_circle(
                 size=150, color="#F59E0B", stroke="#fff", strokeWidth=2, opacity=1
-            ).encode(x="Previsto:Q", y="Observado:Q", tooltip=tooltip)
+            ).encode(x="Previsto:Q", y="Real:Q", tooltip=tooltip)
         )
 
     grafico = alt.layer(*camadas).properties(height=300).configure_axis(
@@ -486,47 +605,72 @@ def _grafico(observado, previsto, cenarios, cenario_destacado, dependente):
         tickColor="#C3D9F2",
     ).configure_view(strokeWidth=0)
 
-    st.markdown('<div class="reg-card-title">Previsto × Observado</div>', unsafe_allow_html=True)
+    st.markdown("""
+        <div class="reg-card-title">Previsto × Real</div>
+        <div class="reg-card-note">
+            Cada ponto é um cenário. Perto da linha verde, o modelo acertou.
+        </div>
+    """, unsafe_allow_html=True)
     st.altair_chart(grafico, use_container_width=True)
 
-    nota = "Linha verde: previsão perfeita."
-    if not destaque.empty:
-        nota += f" Ponto laranja: Cenário {cenario_destacado}."
-    st.markdown(f'<div class="reg-chart-note">{nota}</div>', unsafe_allow_html=True)
+    if destaque.empty:
+        st.markdown(
+            f'<div class="reg-chart-note">O Cenário {cenario_destacado} não tem dados '
+            "completos neste ano.</div>",
+            unsafe_allow_html=True,
+        )
+    else:
+        real = float(destaque["Real"].iloc[0])
+        previsto_cenario = float(destaque["Previsto"].iloc[0])
+        st.markdown(
+            f'<div class="reg-destaque">● <b>Cenário {cenario_destacado}</b>: '
+            f"real {_moeda_mi(real)}, previsto {_moeda_mi(previsto_cenario)} "
+            f"(diferença de {_moeda_mi(abs(real - previsto_cenario))}).</div>",
+            unsafe_allow_html=True,
+        )
 
 
-def _insight(dependente, preditores, modelo):
-    # Destaca o preditor mais significativo (menor p-valor)
-    i = int(np.argmin(modelo["p"]))
-    nome, coef, p = preditores[i], modelo["coef"][i], modelo["p"][i]
+def _resumo(dependente, fatores, modelo):
+    principal = fatores[0]
+    rotulo, _ = _confianca(principal["p"])
 
-    if p < 0.05:
-        sinal = "+" if coef >= 0 else "−"
+    if principal["p"] < 0.05:
+        direcao = "aumenta" if principal["impacto"] >= 0 else "diminui"
         texto = (
-            f"A cada +R$ 1 mi em {nome}, {dependente} varia "
-            f"{sinal}{_moeda_mi(abs(coef))}, mantendo o resto constante "
-            f"(p {_p_valor(p) if p < 0.001 else '= ' + _p_valor(p)})."
+            f"<strong>{principal['nome']} é o fator que mais pesa.</strong>"
+            f"Se {principal['nome']} crescer {VARIACAO_IMPACTO:.0%}, {dependente} "
+            f"{direcao} cerca de {_moeda_mi(abs(principal['impacto']))}, com confiança "
+            f"{rotulo.lower()}. Juntos, os fatores escolhidos explicam "
+            f"{_num(max(modelo['r2_ajustado'], 0) * 100, 0)}% das diferenças de "
+            f"{dependente} entre os cenários."
         )
     else:
         texto = (
-            "Nenhum preditor selecionado tem efeito estatisticamente "
-            f"significativo sobre {dependente} (p ≥ 0,05)."
+            "<strong>Nenhum fator teve efeito consistente.</strong>"
+            f"Os fatores escolhidos não mostram relação confiável com {dependente} "
+            "neste ano. Experimente outros fatores."
         )
 
     alerta = ""
     if modelo["r2_ajustado"] > 0.99:
         alerta = (
-            '<span class="reg-alerta">R² muito próximo de 1: as variáveis podem estar '
-            "ligadas por uma identidade contábil (uma é calculada a partir das outras), "
-            "e não por uma relação a ser descoberta.</span>"
+            '<span class="reg-alerta">⚠ O modelo explica quase 100%. Isso costuma '
+            f"acontecer quando {dependente} é calculado diretamente a partir dos fatores "
+            "escolhidos (uma conta contábil). Nesse caso o resultado confirma a conta, "
+            "mas não revela uma relação nova.</span>"
         )
 
-    st.markdown(f"""
-        <div class="reg-insight">
-            <span class="reg-insight-icon">β</span>
-            <p>{texto}{alerta}</p>
-        </div>
-    """, unsafe_allow_html=True)
+    ressalva = (
+        '<span class="reg-ressalva">A análise mostra associação entre os valores dos '
+        "cenários simulados, não prova de causa e efeito.</span>"
+    )
+
+    # Tudo numa linha: sem alerta, uma linha vazia faria o markdown virar código
+    st.markdown(
+        f'<div class="reg-insight"><span class="reg-insight-icon">β</span>'
+        f"<p>{texto}{alerta}{ressalva}</p></div>",
+        unsafe_allow_html=True,
+    )
 
 
 # ---------- Página principal ----------
@@ -546,17 +690,17 @@ def render_regressao():
 
         ano, cenario = _topo(anos, cenarios)
         dependente, preditores = _filtros()
+        _como_ler()
 
         if not preditores:
-            st.info("Selecione pelo menos um preditor para ajustar o modelo.")
+            st.info("Escolha pelo menos um fator no passo 2 para ver a análise.")
             return
 
         colunas = [VARIAVEIS[dependente]] + [VARIAVEIS[p] for p in preditores]
-        recorte = df if ano == TODOS_OS_ANOS else df[df["Ano"] == ano]
-        recorte = recorte[["Cenario"] + colunas].dropna()
+        recorte = df[df["Ano"] == ano][["Cenario"] + colunas].dropna()
 
         if len(recorte) <= len(preditores) + 1:
-            st.warning("Não há observações suficientes para ajustar o modelo neste recorte.")
+            st.warning("Não há cenários suficientes com dados neste ano para fazer a análise.")
             return
 
         # Valores em R$ mi: deixa os números legíveis e o cálculo mais estável
@@ -566,53 +710,71 @@ def render_regressao():
         mantidos, removidos = remover_colineares(X, preditores)
 
         if removidos:
-            st.warning(
-                f"Removido do modelo: {', '.join(removidos)}. "
-                "É uma combinação exata dos outros preditores neste recorte "
-                "(por exemplo, Tributos é sempre a mesma fração da Receita), "
-                "então não acrescenta informação."
+            plural = len(removidos) > 1
+            st.info(
+                f"{' e '.join(removidos)} {'ficaram' if plural else 'ficou'} fora da análise: "
+                f"{'repetem' if plural else 'repete'} a informação de outro fator escolhido "
+                "(por exemplo, os Tributos são sempre a mesma porcentagem da Receita).",
+                icon=":material/info:",
             )
 
         if not mantidos:
-            st.info("Nenhum preditor selecionado varia neste recorte.")
+            st.info("Os fatores escolhidos não variam neste ano. Escolha outros fatores.")
             return
 
-        preditores = [preditores[i] for i in mantidos]
         modelo = ajustar_ols(y, X[:, mantidos])
 
+        fatores = sorted(
+            (
+                {
+                    "nome": preditores[i],
+                    "coef": modelo["coef"][j],
+                    "erro_padrao": modelo["erro_padrao"][j],
+                    "p": modelo["p"][j],
+                    "ic_inf": modelo["ic_inf"][j],
+                    "ic_sup": modelo["ic_sup"][j],
+                    "impacto": modelo["coef"][j] * VARIACAO_IMPACTO * X[:, i].mean(),
+                }
+                for j, i in enumerate(mantidos)
+            ),
+            key=lambda f: abs(f["impacto"]),
+            reverse=True,
+        )
+
         with st.container(key="reg_kpis"):
-            k1, k2, k3, _ = st.columns([1, 1, 1, 0.6])
+            k1, k2, k3 = st.columns(3)
             with k1:
                 _kpi(
                     "reg_kpi_r2",
-                    "R² ajustado",
-                    _num(modelo["r2_ajustado"]),
-                    _qualidade_ajuste(modelo["r2_ajustado"]),
+                    "Quanto o modelo explica",
+                    f"{_num(max(modelo['r2_ajustado'], 0) * 100, 0)}%",
+                    f"{_qualidade_ajuste(modelo['r2_ajustado'])} as diferenças de "
+                    f"{dependente} entre os cenários",
                 )
             with k2:
-                _kpi("reg_kpi_erro", "Erro médio", _moeda_mi(modelo["rmse"]), "RMSE")
+                _kpi(
+                    "reg_kpi_erro",
+                    "Erro típico da previsão",
+                    f"± {_moeda_mi(modelo['rmse'])}",
+                    "Diferença comum entre o valor previsto e o real",
+                )
             with k3:
                 _kpi(
                     "reg_kpi_obs",
-                    "Observações",
+                    "Cenários analisados",
                     _num(len(recorte), 0),
-                    "Cenários válidos" if ano != TODOS_OS_ANOS else "Cenários x anos válidos",
+                    f"Todos com dados completos no Ano {ano}",
                 )
 
-        col_tabela, col_grafico = st.columns([1.55, 1], gap="medium")
+        col_tabela, col_grafico = st.columns([1.3, 1], gap="medium")
 
         with col_tabela:
-            with st.container(key="reg_coeficientes"):
-                _tabela_coeficientes(preditores, modelo)
+            with st.container(key="reg_impactos"):
+                _tabela_impactos(dependente, fatores)
+                _detalhes_tecnicos(fatores)
 
         with col_grafico:
             with st.container(key="reg_grafico"):
-                _grafico(
-                    y,
-                    modelo["previsto"],
-                    recorte["Cenario"].to_numpy(),
-                    cenario,
-                    dependente,
-                )
+                _grafico(y, modelo["previsto"], recorte["Cenario"].to_numpy(), cenario)
 
-        _insight(dependente, preditores, modelo)
+        _resumo(dependente, fatores, modelo)

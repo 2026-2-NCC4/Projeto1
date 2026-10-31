@@ -20,10 +20,11 @@ BUSCA_POR_PAGINA = {
     },
     "Regressão": {
         "Regressão": ["regressão", "regressao", "modelo", "variável", "variavel"],
-        "Correlação": ["correlação", "correlacao", "correlacionar"],
-        "Previsão": ["previsão", "previsao", "predição", "predicao"],
-        "Resíduos": ["resíduo", "residuo", "resíduos", "residuos"],
-        "R²": ["r²", "r2", "coeficiente de determinação", "coeficiente de determinacao"],
+        "Impacto de cada fator": ["impacto", "fator", "fatores", "influência", "influencia", "correlação", "correlacao"],
+        "Confiança": ["confiança", "confianca", "p-valor", "significância", "significancia"],
+        "Previsto × Real": ["previsão", "previsao", "previsto", "real", "predição", "predicao"],
+        "Quanto o modelo explica": ["r²", "r2", "explica", "ajuste", "coeficiente de determinação"],
+        "Erro típico da previsão": ["erro", "rmse", "precisão", "precisao"],
     },
     "Insights": {
         "Insights": ["insight", "insights", "destaques", "análise", "analise"],
@@ -45,9 +46,9 @@ AJUDA_POR_PAGINA = {
         "para acompanhar a evolução dos indicadores. As comparações dependem dos dados disponíveis."
     ),
     "Regressão": (
-        "A página de Regressão permite investigar relações entre variáveis por meio de modelos estatísticos. "
-        "Observe os coeficientes, as métricas de ajuste e os resíduos. Associação estatística, por si só, "
-        "não comprova causalidade."
+        "A página de Regressão mostra quais fatores mais influenciam um resultado financeiro. "
+        "Escolha o resultado (passo 1) e os fatores (passo 2). A tabela mostra quanto o resultado muda "
+        "se cada fator crescer 10%, com o grau de confiança. Associação não comprova causa e efeito."
     ),
     "Insights": (
         "A página de Insights reúne destaques e análises derivados da base financeira para ajudar a "
