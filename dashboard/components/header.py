@@ -46,9 +46,9 @@ AJUDA_POR_PAGINA = {
         "para acompanhar a evolução dos indicadores. As comparações dependem dos dados disponíveis."
     ),
     "Regressão": (
-        "A página de Regressão mostra quais fatores mais influenciam um resultado financeiro. "
-        "Escolha o resultado (passo 1) e os fatores (passo 2). A tabela mostra quanto o resultado muda "
-        "se cada fator crescer 10%, com o grau de confiança. Associação não comprova causa e efeito."
+        "A página de Regressão responde o que mais influencia a Geração de Caixa, comparando os "
+        "1.200 cenários de um ano. Escolha o ano; as barras mostram quanto o caixa muda se cada fator "
+        "crescer 10%, com o grau de confiança. Associação não comprova causa e efeito."
     ),
     "Insights": (
         "A página de Insights reúne destaques e análises derivados da base financeira para ajudar a "
