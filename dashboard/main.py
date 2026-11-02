@@ -16,7 +16,7 @@ from pages.comparacao import render_comparacao
 from pages.insights import render_insights
 from pages.regressao import render_regressao
 from pages.sensibilidade import render_sensibilidade
-from pages.ajuda import render_ajuda
+from pages.meta_realizado import render_meta_realizado
 
 
 st.set_page_config(
@@ -104,8 +104,8 @@ elif pagina == "Comparação":
 elif pagina == "Sensibilidade":
     render_sensibilidade()
 
-elif pagina == "Ajuda":
-    render_ajuda()
+elif pagina == "Metas x Realizado":
+    render_meta_realizado()
 
 else:
     st.title(pagina)
