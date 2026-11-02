@@ -1,8 +1,12 @@
+
 from pathlib import Path
+
 import streamlit as st
+
 from components.auth import render_auth_page, usuario_logado
 from components.sidebar import render_sidebar
 from components.header import render_header
+
 from pages.visao_geral import render_visao_geral
 from pages.indicadores import render_indicadores
 from pages.tendencias import render_tendencias
@@ -11,7 +15,8 @@ from pages.ranking import render_ranking
 from pages.comparacao import render_comparacao
 from pages.insights import render_insights
 from pages.regressao import render_regressao
-
+from pages.sensibilidade import render_sensibilidade
+from pages.ajuda import render_ajuda
 
 
 st.set_page_config(
@@ -95,6 +100,12 @@ elif pagina == "Ranking":
 
 elif pagina == "Comparação":
     render_comparacao()
+
+elif pagina == "Sensibilidade":
+    render_sensibilidade()
+
+elif pagina == "Ajuda":
+    render_ajuda()
 
 else:
     st.title(pagina)

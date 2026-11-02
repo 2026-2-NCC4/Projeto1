@@ -25,8 +25,9 @@ GRUPOS = [
         ("Metas x Realizado", "target"),
     ]),
     ("SIMULADOR", [
-        ("Simular novo cenário", "add_circle"),
-    ]),
+    ("Sensibilidade", "tune"),
+    ("Simular novo cenário", "add_circle"),
+]),
     ("ANÁLISE E INSIGHTS", [
         ("Regressão", "scatter_plot"),
         ("Insights", "lightbulb"),
