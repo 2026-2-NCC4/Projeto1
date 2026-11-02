@@ -5,6 +5,7 @@ from components.sidebar import render_sidebar
 from components.header import render_header
 from pages.visao_geral import render_visao_geral
 from pages.indicadores import render_indicadores
+from pages.tendencias import render_tendencias
 from pages.configuracoes import render_configuracoes
 from pages.ranking import render_ranking
 from pages.comparacao import render_comparacao
@@ -76,6 +77,9 @@ if pagina == "Visão Geral":
 
 elif pagina == "Indicadores":
     render_indicadores()
+
+elif pagina == "Tendência":
+    render_tendencias()
 
 elif pagina == "Regressão":
     render_regressao()

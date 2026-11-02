@@ -70,6 +70,9 @@ AJUDA_POR_PAGINA = {
         "resultado econômico e capital investido. Escolha o ano e o cenário no topo; "
         "a tabela no fim mostra todos os valores do recorte."
     ),
+     "Tendência": (
+            "A página de Tendência identifica padrões de evolução financeira, crescimento, estabilidade e possíveis sinais de alerta ao longo dos anos."
+        ),
     "Comparação": (
         "A página de Comparação coloca cenários lado a lado no mesmo ano. "
         "Escolha o ano e os cenários que quer comparar para ver EBITDA e Margem EBITDA de cada um."
