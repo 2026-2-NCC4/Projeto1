@@ -50,6 +50,18 @@ html, body, .stApp {
     gap: 0;
 }
 
+/* O Streamlit põe margin-bottom: -16px em todo bloco de markdown para anular a
+   margem do último parágrafo. Nos blocos feitos com HTML (cards, títulos,
+   grades) isso fazia o conteúdo invadir o bloco de baixo. Zeramos as duas
+   margens: nada se sobrepõe e nada ganha espaço extra. */
+[data-testid="stMain"] [data-testid="stMarkdownContainer"] {
+    margin-bottom: 0 !important;
+}
+
+[data-testid="stMain"] [data-testid="stMarkdownContainer"] > :last-child {
+    margin-bottom: 0 !important;
+}
+
 /* ───────────────────────── SIDEBAR ───────────────────────── */
 
 [data-testid="stSidebar"] {
@@ -578,25 +590,63 @@ body:has(.cti-collapsed-marker) [data-testid="stSidebar"] .st-key-cti_nav_simula
 
 /* ── Telas baixas: compacta em vez de rolar ── */
 
-/* O card de ajuda fica sempre visível; quando falta altura, quem rola é a
-   lista de navegação (configurada acima). Ele só some em janelas muito
-   baixas (ver max-height: 600px), onde não sobraria espaço para o menu. */
+/* O card de ajuda fica sempre visível. Em telas até 860px de altura (a
+   maioria dos notebooks) ele fica compacto — ícone e título na mesma linha,
+   sem o texto — para o menu continuar cabendo sem rolar. Ele só some em
+   janelas muito baixas (ver max-height: 600px). */
 @media (max-height: 860px) {
-    :root { --cti-row-h: 38px; }
-    .cti-group-title { margin: 12px 0 4px; }
-    .st-key-cti_sidebar_bottom { padding: 8px 0 12px; }
+    :root { --cti-row-h: 36px; }
+    .cti-group-title { margin: 10px 0 4px; }
+    .st-key-cti_sidebar_bottom { padding: 8px 0 10px; }
+
+    .st-key-cti_help_card {
+        padding: 10px 12px;
+        gap: 8px !important;
+    }
+
+    .cti-help-icon {
+        width: 24px;
+        height: 24px;
+        margin: 0 8px 0 0;
+        vertical-align: middle;
+    }
+
+    .cti-help-icon svg {
+        width: 15px;
+        height: 15px;
+    }
+
+    .cti-help-title {
+        display: inline;
+        vertical-align: middle;
+        margin: 0;
+    }
+
+    .st-key-cti_help_card p.cti-help-text {
+        display: none;
+    }
+
+    .st-key-cti_ajuda button {
+        min-height: 30px !important;
+    }
+}
+
+@media (max-height: 800px) {
+    :root { --cti-row-h: 34px; }
+    .cti-group-title { margin: 7px 0 2px; }
+    .st-key-cti_sidebar_bottom { padding: 6px 0 8px; }
 }
 
 @media (max-height: 740px) {
-    :root { --cti-row-h: 36px; }
-    .cti-group-title { margin: 8px 0 3px; }
+    :root { --cti-row-h: 32px; }
+    .cti-group-title { margin: 6px 0 2px; }
 }
 
 /* janelas muito baixas: a navegação rola (já está configurada acima),
    sem nunca ficar atrás do rodapé */
 @media (max-height: 640px) {
-    :root { --cti-row-h: 34px; }
-    .cti-group-title { margin: 6px 0 2px; }
+    :root { --cti-row-h: 32px; }
+    .cti-group-title { margin: 5px 0 2px; }
     .st-key-cti_sidebar_bottom { padding: 6px 0 8px; }
 }
 

@@ -105,20 +105,21 @@ PAGE_STYLE = """
         font-size: 16px;
         font-weight: 700;
         color: var(--cti-text);
-        margin-top: 10px;
+        margin-top: 12px;
     }
 
     .ajd-section-note {
         font-size: 12px;
         color: #8AA4BF;
-        margin: 2px 0 -4px;
+        margin-top: 2px;
     }
 
-    /* passos */
+    /* passos: mesmo espaçamento (16px) das colunas dos cartões de páginas,
+       para as duas grades ficarem alinhadas */
     .ajd-passos {
         display: grid;
         grid-template-columns: repeat(3, minmax(0, 1fr));
-        gap: 14px;
+        gap: 16px;
     }
 
     .ajd-passo,
@@ -282,9 +283,12 @@ def _paginas():
         if nome in PAGINAS
     ]
 
-    for inicio in range(0, len(paginas), 3):
-        colunas = st.columns(3, gap="medium")
-        for coluna, (grupo, nome) in zip(colunas, paginas[inicio:inicio + 3]):
+    # 5 por linha: as 10 páginas formam 2 linhas completas (com 3, sobrava
+    # um cartão sozinho na última linha)
+    por_linha = 5
+    for inicio in range(0, len(paginas), por_linha):
+        colunas = st.columns(por_linha, gap="small")
+        for coluna, (grupo, nome) in zip(colunas, paginas[inicio:inicio + por_linha]):
             with coluna:
                 chave = "".join(c if c.isalnum() else "_" for c in nome.lower())
                 with st.container(key=f"ajd_pagina_{chave}"):
