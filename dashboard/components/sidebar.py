@@ -170,19 +170,15 @@ def render_sidebar():
                 with st.container(key="cti_help_card"):
                     st.markdown(
                         f"""
-                        <div class="cti-help-heading">
-                            <span class="cti-help-icon">{ICONE_AJUDA}</span>
-                            <div>
-                                <strong>Precisa de ajuda?</strong>
-                                <p>Verifique nossa seção explicativa.</p>
-                            </div>
-                        </div>
+                        <span class="cti-help-icon">{ICONE_AJUDA}</span>
+                        <strong class="cti-help-title">Precisa de ajuda?</strong>
+                        <p class="cti-help-text">Veja como transformar dados em decisões melhores.</p>
                         """,
                         unsafe_allow_html=True,
                     )
 
                     if st.button(
-                        "Ajuda",
+                        "Abrir guia",
                         key="cti_ajuda",
                         use_container_width=True,
                     ):

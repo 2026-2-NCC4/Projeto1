@@ -53,6 +53,11 @@ BUSCA_POR_PAGINA = {
         "Premissas da simulação": ["premissa", "premissas", "e se", "variação", "variacao"],
         "Cascata simulada": ["cascata", "waterfall", "da receita ao resultado"],
     },
+    "Ajuda": {
+        "Guia do painel": ["ajuda", "guia", "como usar", "tutorial", "dúvida", "duvida"],
+        "Glossário": ["glossário", "glossario", "o que é", "o que e", "significado", "definição", "definicao"],
+        "Perguntas frequentes": ["pergunta", "perguntas", "faq", "n/d"],
+    },
     "Configurações": {
         "Perfil da conta": ["perfil", "conta", "usuário", "usuario", "email", "e-mail", "nome"],
         "Senha": ["senha", "segurança", "seguranca", "alterar senha"],
@@ -97,6 +102,10 @@ AJUDA_POR_PAGINA = {
         "No simulador você muda Receita, Custos, Tributos e Investimentos em % e vê na hora "
         "como ficam EBITDA, margens, Resultado Líquido e Geração de Caixa. A base pode ser a "
         "média dos cenários ou um cenário específico; use Restaurar para voltar a zero."
+    ),
+    "Ajuda": (
+        "Este é o guia do painel: primeiros passos, o que cada página responde, "
+        "um glossário dos indicadores e as perguntas mais comuns."
     ),
     "Configurações": (
         "Nesta página você edita seu nome, troca a senha, escolhe a página inicial "
@@ -251,5 +260,14 @@ def render_header(pagina_atual=None):
                 AJUDA_POR_PAGINA.get(pagina, AJUDA_EM_CONSTRUCAO.format(pagina=pagina)),
                 icon=":material/help:",
             )
+            if pagina != "Ajuda":
+                st.button(
+                    "Ver guia completo",
+                    icon=":material/menu_book:",
+                    key="cti_ajuda_guia",
+                    type="tertiary",
+                    on_click=_ir_para,
+                    args=("Ajuda",),
+                )
 
     _resultados_busca(pagina)

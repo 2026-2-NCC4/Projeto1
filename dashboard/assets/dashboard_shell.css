@@ -350,60 +350,68 @@ body:has(.cti-collapsed-marker) .st-key-cti_toggle button {
 }
 
 .st-key-cti_help_card {
-    background: #fff;
-    border-radius: 12px;
-    padding: 12px;
+    background: linear-gradient(160deg, #3A9AD9 0%, #2479BF 100%);
+    border-radius: 14px;
+    padding: 14px;
     margin-bottom: 8px;
     gap: 10px !important;
-}
-
-.cti-help-heading {
-    display: flex;
-    align-items: center;
-    gap: 10px;
+    box-shadow: 0 8px 18px rgba(0, 75, 133, .18);
 }
 
 .cti-help-icon {
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    width: 34px;
-    height: 34px;
-    border-radius: 9px;
-    background: var(--cti-frame);
+    width: 30px;
+    height: 30px;
+    border-radius: 8px;
+    background: #fff;
     color: var(--cti-blue);
-    flex-shrink: 0;
+    margin-bottom: 8px;
 }
 
-.cti-help-heading strong {
+.cti-help-icon svg {
+    width: 18px;
+    height: 18px;
+}
+
+.cti-help-title {
     display: block;
-    font-size: 13px;
+    font-size: 14px;
     font-weight: 700;
-    color: var(--cti-text);
+    color: #fff;
     line-height: 1.2;
-    margin-bottom: 2px;
+    margin-bottom: 4px;
 }
 
-.cti-help-heading p {
-    margin: 0;
-    font-size: 11.5px;
-    line-height: 1.35;
-    color: var(--cti-muted);
+/* !important: o estilo de parágrafo do Streamlit ganhava e o texto ficava
+   com fonte grande, deixando o card com o dobro da altura */
+.st-key-cti_help_card p.cti-help-text {
+    margin: 0 !important;
+    padding: 0 !important;
+    font-size: 11.5px !important;
+    line-height: 1.4 !important;
+    color: rgba(255, 255, 255, .85) !important;
 }
 
 .st-key-cti_ajuda button {
-    background: var(--cti-blue) !important;
+    background: #0B3B66 !important;
     color: #fff !important;
     min-height: 34px !important;
     justify-content: center !important;
 }
 
-.st-key-cti_ajuda button > div,
-.st-key-cti_ajuda button span[data-has-shortcut] {
+/* prefixo do sidebar: precisa vencer a regra geral que alinha os itens à esquerda */
+[data-testid="stSidebar"] .st-key-cti_ajuda .stButton button,
+[data-testid="stSidebar"] .st-key-cti_ajuda .stButton button > div,
+[data-testid="stSidebar"] .st-key-cti_ajuda .stButton button > div > span,
+[data-testid="stSidebar"] .st-key-cti_ajuda .stButton button span[data-has-shortcut] {
     justify-content: center !important;
 }
 
 .st-key-cti_ajuda button p {
+    width: 100%;
+    text-align: center !important;
     font-size: 12px !important;
     font-weight: 700 !important;
     letter-spacing: .04em;
@@ -411,7 +419,7 @@ body:has(.cti-collapsed-marker) .st-key-cti_toggle button {
 }
 
 .st-key-cti_ajuda button:hover {
-    background: var(--cti-dark) !important;
+    background: #072A4A !important;
     color: #fff !important;
 }
 
@@ -570,14 +578,12 @@ body:has(.cti-collapsed-marker) [data-testid="stSidebar"] .st-key-cti_nav_simula
 
 /* ── Telas baixas: compacta em vez de rolar ── */
 
-/* O card de ajuda é o item mais "caro" em altura (~125px). Em vez de
-   espremer o card e todos os itens, ele some por inteiro: a ajuda continua
-   acessível pelo ícone "?" do header. Os itens só encolhem de verdade
-   quando ainda assim não couberem. */
+/* O card de ajuda fica sempre visível; quando falta altura, quem rola é a
+   lista de navegação (configurada acima). Ele só some em janelas muito
+   baixas (ver max-height: 600px), onde não sobraria espaço para o menu. */
 @media (max-height: 860px) {
     :root { --cti-row-h: 38px; }
     .cti-group-title { margin: 12px 0 4px; }
-    .st-key-cti_help_card { display: none !important; }
     .st-key-cti_sidebar_bottom { padding: 8px 0 12px; }
 }
 
@@ -592,6 +598,11 @@ body:has(.cti-collapsed-marker) [data-testid="stSidebar"] .st-key-cti_nav_simula
     :root { --cti-row-h: 34px; }
     .cti-group-title { margin: 6px 0 2px; }
     .st-key-cti_sidebar_bottom { padding: 6px 0 8px; }
+}
+
+/* janelas muito baixas: o guia continua no ícone "?" do header */
+@media (max-height: 600px) {
+    .st-key-cti_help_card { display: none !important; }
 }
 
 /* ESCONDER CONTROLE NATIVO */
