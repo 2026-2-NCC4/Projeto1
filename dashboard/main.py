@@ -17,6 +17,7 @@ from pages.insights import render_insights
 from pages.regressao import render_regressao
 from pages.sensibilidade import render_sensibilidade
 from pages.meta_realizado import render_meta_realizado
+from pages.simulador import render_simulador
 
 
 st.set_page_config(
@@ -106,6 +107,9 @@ elif pagina == "Sensibilidade":
 
 elif pagina == "Metas x Realizado":
     render_meta_realizado()
+
+elif pagina == "Simular novo cenário":
+    render_simulador()
 
 else:
     st.title(pagina)

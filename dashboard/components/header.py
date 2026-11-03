@@ -50,6 +50,8 @@ BUSCA_POR_PAGINA = {
     },
     "Simular novo cenário": {
         "Simulador": ["simular", "simulação", "simulacao", "novo cenário", "novo cenario"],
+        "Premissas da simulação": ["premissa", "premissas", "e se", "variação", "variacao"],
+        "Cascata simulada": ["cascata", "waterfall", "da receita ao resultado"],
     },
     "Configurações": {
         "Perfil da conta": ["perfil", "conta", "usuário", "usuario", "email", "e-mail", "nome"],
@@ -90,6 +92,11 @@ AJUDA_POR_PAGINA = {
         "A página de Insights resume os destaques do ano escolhido: caixa do cenário selecionado, "
         "crescimento da receita, melhor margem e o fator de maior sensibilidade, "
         "com uma conclusão pronta para o pitch."
+    ),
+    "Simular novo cenário": (
+        "No simulador você muda Receita, Custos, Tributos e Investimentos em % e vê na hora "
+        "como ficam EBITDA, margens, Resultado Líquido e Geração de Caixa. A base pode ser a "
+        "média dos cenários ou um cenário específico; use Restaurar para voltar a zero."
     ),
     "Configurações": (
         "Nesta página você edita seu nome, troca a senha, escolhe a página inicial "
