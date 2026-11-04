@@ -2,8 +2,8 @@ import altair as alt
 import pandas as pd
 import streamlit as st
 
-from data.load_data import carregar_demonstrativo
-from pages.regressao import VARIAVEIS
+from data.load_data import carregar_demonstrativo, carregar_indicadores
+from pages.indicadores import INDICADORES
 
 
 PAGE_STYLE = """
@@ -102,13 +102,21 @@ def _card_metrica(rotulo, valor, detalhe):
     )
 
 
-def _grafico_ranking(dados, titulo, chave):
-    with st.container(key=chave):
-        st.markdown(f'<div class="rank-card-title">{titulo}</div>', unsafe_allow_html=True)
+def _grafico_ranking(dados, titulo, indicador, formato):
+    with st.container(key="rank_grafico"):
         st.markdown(
-            '<div class="rank-card-note">EBITDA acumulado no ano selecionado</div>',
+            f'<div class="rank-card-title">{titulo}</div>',
             unsafe_allow_html=True,
         )
+
+        if formato == "moeda":
+            eixo = f"{indicador} (R$ milhões)"
+        elif formato == "percentual":
+            eixo = indicador + " (%)"
+        elif formato == "dias":
+            eixo = indicador + " (dias)"
+        else:
+            eixo = indicador
 
         grafico = (
             alt.Chart(dados)
@@ -116,20 +124,19 @@ def _grafico_ranking(dados, titulo, chave):
             .encode(
                 x=alt.X(
                     "Valor:Q",
-                    title="EBITDA (R$ mi)",
-                    axis=alt.Axis(format=",.1f"),
+                    title=eixo,
                 ),
                 y=alt.Y(
                     "Cenário:N",
-                    sort="-x" if "maiores" in chave else "x",
+                    sort="-x",
                     title=None,
                 ),
                 tooltip=[
                     alt.Tooltip("Cenário:N"),
-                    alt.Tooltip("Valor:Q", format=",.2f", title="EBITDA (R$ mi)"),
+                    alt.Tooltip("Valor:Q", title=indicador, format=",.3f"),
                 ],
             )
-            .properties(height=300)
+            .properties(height=420)
         )
 
         st.altair_chart(grafico, use_container_width=True)
@@ -140,37 +147,31 @@ def render_ranking():
 
     with st.container(key="rank_page"):
         try:
-            df = carregar_demonstrativo()
+            df = carregar_indicadores()
         except Exception as erro:
-            st.error(f"Não foi possível carregar a base do demonstrativo: {erro}")
+            st.error(f"Não foi possível carregar os indicadores: {erro}")
             return
 
-        coluna_metrica = VARIAVEIS.get("EBITDA")
-        colunas_necessarias = {"Ano", "Cenario", coluna_metrica}
-        ausentes = colunas_necessarias.difference(df.columns)
+        indicadores_disponiveis = [
+            nome for nome in INDICADORES
+            if nome in df.columns
+        ]
 
-        if ausentes:
-            st.error(
-                "A base não contém as colunas necessárias para o ranking: "
-                + ", ".join(sorted(ausentes))
-            )
+        if not indicadores_disponiveis:
+            st.warning("Não há indicadores disponíveis para o ranking.")
             return
 
         anos = sorted(
-            pd.to_numeric(df["Ano"], errors="coerce")
+            pd.to_numeric(df["Ano_Numero"], errors="coerce")
             .dropna()
             .astype(int)
             .unique()
             .tolist()
         )
 
-        if not anos:
-            st.warning("Não há anos disponíveis para montar o ranking.")
-            return
-
         with st.container(key="rank_topo"):
-            titulo, coluna_ano, coluna_botao = st.columns(
-                [3.2, 1, 1.3],
+            titulo, coluna_ano, coluna_metrica, coluna_botao = st.columns(
+                [2.7, 1, 1.4, 1.3],
                 vertical_alignment="bottom",
             )
 
@@ -180,7 +181,7 @@ def render_ranking():
                     <div class="rank-eyebrow">PAINEL FINANCEIRO</div>
                     <div class="rank-title">Ranking de cenários</div>
                     <div class="rank-subtitle">
-                        Compare os cenários pelo EBITDA no ano escolhido.
+                        Classifique os cenários pelo indicador selecionado.
                     </div>
                     """,
                     unsafe_allow_html=True,
@@ -194,6 +195,15 @@ def render_ranking():
                     key="rank_ano",
                 )
 
+            with coluna_metrica:
+                indicador = st.selectbox(
+                    "Indicador",
+                    options=indicadores_disponiveis,
+                    index=indicadores_disponiveis.index("EBITDA")
+                    if "EBITDA" in indicadores_disponiveis else 0,
+                    key="rank_indicador",
+                )
+
             with coluna_botao:
                 if st.button(
                     "Nova simulação",
@@ -205,31 +215,36 @@ def render_ranking():
                     st.rerun()
 
         dados_ano = df.loc[
-            pd.to_numeric(df["Ano"], errors="coerce") == ano,
-            ["Cenario", coluna_metrica],
+            df["Ano_Numero"].eq(ano),
+            ["Cenario", indicador],
         ].copy()
 
-        dados_ano["Cenario"] = pd.to_numeric(
-            dados_ano["Cenario"], errors="coerce"
-        )
-        dados_ano[coluna_metrica] = pd.to_numeric(
-            dados_ano[coluna_metrica], errors="coerce"
+        dados_ano[indicador] = pd.to_numeric(
+            dados_ano[indicador],
+            errors="coerce",
         )
 
         dados_ano = (
             dados_ano.dropna()
-            .groupby("Cenario", as_index=False)[coluna_metrica]
+            .groupby("Cenario", as_index=False)[indicador]
             .mean()
-            .sort_values(coluna_metrica, ascending=False)
+            .sort_values(indicador, ascending=False)
         )
 
         if dados_ano.empty:
-            st.warning(f"Não há valores de EBITDA disponíveis para {ano}.")
+            st.warning(
+                f"Não há valores de {indicador} disponíveis para o ano {ano}."
+            )
             return
 
-        dados_ano["Valor"] = dados_ano[coluna_metrica] / 1_000_000
+        formato = INDICADORES[indicador]["formato"]
+
+        divisor = 1_000_000 if formato == "moeda" else 1
+        dados_ano["Valor"] = dados_ano[indicador] / divisor
+
         dados_ano["Cenário"] = dados_ano["Cenario"].map(
             lambda numero: f"Cenário {int(numero)}"
+            if pd.notna(numero) else "Cenário sem identificação"
         )
 
         maior = dados_ano.iloc[0]
@@ -239,40 +254,39 @@ def render_ranking():
 
         with col_topo:
             with st.container(key="rank_kpi_topo"):
+                valor = (
+                    _moeda_mi(maior["Valor"])
+                    if formato == "moeda"
+                    else f"{maior['Valor']:.2f}"
+                )
                 _card_metrica(
-                    "Maior EBITDA",
-                    _moeda_mi(maior["Valor"]),
-                    f"Cenário {int(maior['Cenario'])} · Ano {ano}",
+                    f"Maior {indicador}",
+                    valor,
+                    f"{maior['Cenário']} · Ano {ano}",
                 )
 
         with col_base:
             with st.container(key="rank_kpi_base"):
+                valor = (
+                    _moeda_mi(menor["Valor"])
+                    if formato == "moeda"
+                    else f"{menor['Valor']:.2f}"
+                )
                 _card_metrica(
-                    "Menor EBITDA",
-                    _moeda_mi(menor["Valor"]),
-                    f"Cenário {int(menor['Cenario'])} · Ano {ano}",
+                    f"Menor {indicador}",
+                    valor,
+                    f"{menor['Cenário']} · Ano {ano}",
                 )
 
-        maiores = dados_ano.head(10).sort_values("Valor", ascending=True)
-        menores = dados_ano.tail(10).sort_values("Valor", ascending=False)
-
-        col_maiores, col_menores = st.columns(2)
-
-        with col_maiores:
-            _grafico_ranking(
-                maiores,
-                "10 maiores cenários",
-                "rank_maiores",
-            )
-
-        with col_menores:
-            _grafico_ranking(
-                menores,
-                "10 menores cenários",
-                "rank_menores",
-            )
+        _grafico_ranking(
+            dados_ano.head(10).sort_values("Valor", ascending=True),
+            f"10 maiores cenários — {indicador}",
+            indicador,
+            formato,
+        )
 
         st.caption(
-            "Fonte: Demonstrativo Normalizado. Valores monetários convertidos "
-            "para R$ milhões. O ranking considera os registros do ano selecionado."
+            "Fonte: aba _Indicadores da planilha Analise_Financeira.xlsx. "
+            "O ranking considera a média dos registros de cada cenário "
+            "no ano selecionado."
         )

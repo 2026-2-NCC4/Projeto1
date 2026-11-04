@@ -85,9 +85,47 @@ COLUNAS_COMPARACAO = [
     "EBITDA",
     "Margem EBITDA",
     "Margem Líquida",
+    "NOPAT",
+    "ROE",
     "ROIC",
+    "WACC",
     "EVA",
+    "MVA Aproximado",
+    "CCL",
+    "PMR",
+    "PMP",
+    "Ciclo Financeiro",
+    "Necessidade de Capital de Giro",
+    "Taxa de Conversão da Receita em Caixa",
+    "FCO",
+    "FCO / EBITDA",
+    "FCO / Lucro Líquido",
+    "FCL",
+    "Capex / Receita",
+    "Capex / D&A",
+    "Cobertura de Juros",
+    "FCO / Dívida Bruta",
+    "Payout em Caixa",
+    "Cobertura de Dividendos",
+    "DuPont - Margem Líquida",
+    "DuPont - Giro do Ativo",
+    "DuPont - Alavancagem",
+    "ROE DuPont",
 ]
+
+COLUNAS_MONETARIAS = {
+    "EBITDA", "EVA", "NOPAT", "MVA Aproximado",
+    "CCL", "Necessidade de Capital de Giro", "FCO", "FCL",
+}
+
+COLUNAS_PERCENTUAIS = {
+    "Margem EBITDA", "Margem Líquida", "ROE", "ROIC", "WACC",
+    "Taxa de Conversão da Receita em Caixa", "Capex / Receita",
+    "FCO / Dívida Bruta", "Payout em Caixa",
+    "DuPont - Margem Líquida", "ROE DuPont",
+}
+
+COLUNAS_EM_DIAS = {"PMR", "PMP", "Ciclo Financeiro"}
 
 COLUNAS_MONETARIAS = {"EBITDA", "EVA"}
 COLUNAS_PERCENTUAIS = {"Margem EBITDA", "Margem Líquida", "ROIC"}
@@ -102,14 +140,10 @@ def _rotulo_cenario(valor):
     if not texto:
         return "Cenário sem identificação"
 
-    # Mantém os rótulos textuais da planilha, por exemplo:
-    # "Total Cen_00001".
-    try:
-        numero = float(texto)
-        if numero.is_integer():
-            return f"Cenário {int(numero)}"
-    except ValueError:
-        pass
+    encontrados = re.findall(r"\d+", texto)
+
+    if encontrados:
+        return f"Cenário {int(encontrados[-1])}"
 
     return texto
 
@@ -139,7 +173,7 @@ def _extrair_ano(valor):
 def _preparar_dados():
     df = carregar_indicadores()
 
-    obrigatorias = {"Cenario", *COLUNAS_COMPARACAO}
+    obrigatorias = {"Cenario", "Ano", "EBITDA", "Margem EBITDA"}
     ausentes = obrigatorias.difference(df.columns)
 
     if ausentes:
@@ -162,6 +196,17 @@ def _preparar_dados():
     dados = df.copy()
     dados["Ano_Numero"] = pd.to_numeric(anos, errors="coerce")
     dados["Cenario"] = dados["Cenario"].astype("string").str.strip()
+
+    indicadores_existentes = [
+        coluna for coluna in COLUNAS_COMPARACAO
+        if coluna in dados.columns
+    ]
+
+    for coluna in indicadores_existentes:
+        dados[coluna] = pd.to_numeric(
+            dados[coluna],
+            errors="coerce",
+        )
 
     for coluna in COLUNAS_COMPARACAO:
         dados[coluna] = pd.to_numeric(dados[coluna], errors="coerce")
@@ -190,16 +235,30 @@ def _percentual(valor):
 
 
 def _formatar_indicador(indicador, valor):
+    if pd.isna(valor):
+        return "—"
+
     if indicador in COLUNAS_MONETARIAS:
         return _moeda_mi(valor)
 
     if indicador in COLUNAS_PERCENTUAIS:
         return _percentual(valor)
 
-    if pd.isna(valor):
-        return "N/D"
+    if indicador in COLUNAS_EM_DIAS:
+        return f"{float(valor):.1f} dias".replace(".", ",")
 
-    return str(valor)
+    if indicador in {
+        "FCO / EBITDA",
+        "FCO / Lucro Líquido",
+        "Capex / D&A",
+        "Cobertura de Juros",
+        "Cobertura de Dividendos",
+        "DuPont - Giro do Ativo",
+        "DuPont - Alavancagem",
+    }:
+        return f"{float(valor):.2f}x".replace(".", ",")
+
+    return f"{float(valor):.2f}".replace(".", ",")
 
 
 def _grafico_cenarios(dados, selecionados):
@@ -291,7 +350,13 @@ def _tabela_comparacao(dados_ano, selecionados):
 
         linhas = []
 
-        for indicador in COLUNAS_COMPARACAO:
+        indicadores_existentes = [
+            indicador
+            for indicador in COLUNAS_COMPARACAO
+            if indicador in selecionados_df.columns
+        ]
+
+        for indicador in indicadores_existentes:
             linha = {"Indicador": indicador}
 
             for cenario in selecionados:
@@ -300,9 +365,9 @@ def _tabela_comparacao(dados_ano, selecionados):
                 ].iloc[0]
 
                 linha[_rotulo_cenario(cenario)] = _formatar_indicador(
-                    indicador,
-                    registro[indicador],
-                )
+                indicador,
+                registro[indicador],
+            )
 
             linhas.append(linha)
 
@@ -326,42 +391,34 @@ def _tabela_todos_os_cenarios(dados_ano):
             unsafe_allow_html=True,
         )
 
-        tabela = dados_ano.dropna(subset=["Cenario"]).copy()
-        tabela = tabela[
-            ["Cenario", *COLUNAS_COMPARACAO]
-        ].sort_values("EBITDA", ascending=False)
+        indicadores_existentes = [
+            coluna
+            for coluna in COLUNAS_COMPARACAO
+            if coluna in dados_ano.columns
+        ]
 
+        tabela = dados_ano.dropna(subset=["Cenario"]).copy()
         tabela["Cenário"] = tabela["Cenario"].map(_rotulo_cenario)
-        tabela = tabela.drop(columns=["Cenario"])
+
+        tabela = tabela[
+            ["Cenário", *indicadores_existentes]
+        ].copy()
+
+        tabela = tabela.sort_values(
+            by="EBITDA",
+            ascending=False,
+        )
+
+        for indicador in indicadores_existentes:
+            tabela[indicador] = tabela[indicador].apply(
+                lambda valor: _formatar_indicador(indicador, valor)
+            )
 
         st.dataframe(
             tabela,
             hide_index=True,
             use_container_width=True,
-            column_config={
-                "EBITDA": st.column_config.NumberColumn(
-                    "EBITDA (R$)",
-                    format="R$ %.2f",
-                ),
-                "EVA": st.column_config.NumberColumn(
-                    "EVA (R$)",
-                    format="R$ %.2f",
-                ),
-                "Margem EBITDA": st.column_config.NumberColumn(
-                    "Margem EBITDA",
-                    format="%.2%%",
-                ),
-                "Margem Líquida": st.column_config.NumberColumn(
-                    "Margem Líquida",
-                    format="%.2%%",
-                ),
-                "ROIC": st.column_config.NumberColumn(
-                    "ROIC",
-                    format="%.2%%",
-                ),
-            },
         )
-
 
 def render_comparacao():
     st.markdown(PAGE_STYLE, unsafe_allow_html=True)

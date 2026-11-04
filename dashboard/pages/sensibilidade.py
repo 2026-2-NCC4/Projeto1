@@ -224,6 +224,325 @@ def _calcular_sensibilidade(df, ano):
         "removidos": removidos,
     }, None
 
+def _simular_indicador(df, ano, cenario, fator, variacao):
+    """
+    Simula alterações em indicadores financeiros a partir
+    dos dados do cenário e ano selecionados.
+
+    A variação é aplicada proporcionalmente ao valor-base.
+    """
+
+    dados = df.loc[
+        (df["Ano"] == ano) &
+        (df["Cenario"] == cenario)
+    ]
+
+    if dados.empty:
+        return None, "Não foram encontrados dados para esse cenário e ano."
+
+    linha = dados.iloc[0]
+
+    def valor(conta):
+        resultado = pd.to_numeric(
+            pd.Series([linha.get(conta, np.nan)]),
+            errors="coerce",
+        ).iloc[0]
+
+        return float(resultado) if pd.notna(resultado) else np.nan
+
+    def dividir(a, b):
+        if pd.isna(a) or pd.isna(b) or b == 0:
+            return np.nan
+        return a / b
+
+    receita = valor("DRE - Receita")
+    tributos = valor("DRE - Tributos")
+    custos = abs(valor("DRE - Custos"))
+    ebitda = valor("DRE - EBITDA")
+    ebit = valor("DRE - Resultado Operacional")
+    resultado_antes_ir = valor("DRE - Resultado Antes do Imposto de Renda")
+    imposto_ir = abs(valor("DRE - Imposto de Renda e Contribuição Social"))
+
+    ativo = abs(valor("BAL - Total do Ativo"))
+    caixa = abs(valor("BAL - Disponível"))
+    patrimonio = abs(valor("BAL  - Patrimônio Líquido"))
+    divida_cp = abs(valor("BAL - Emprést"))
+    divida_lp = abs(valor("BAL - Empréstimos"))
+
+    clientes = abs(valor("BAL - Contas a Receber - Clientes"))
+    fornecedores = abs(valor("BAL - Fornecedores"))
+
+    capex = abs(valor("FLU - Investimentos"))
+    fco = valor("FLU - Geração de Caixa")
+
+    receita_liquida = receita + tributos
+    capital_investido = patrimonio + divida_cp + divida_lp - caixa
+
+    aliquota_ir = dividir(imposto_ir, resultado_antes_ir)
+    if pd.isna(aliquota_ir):
+        aliquota_ir = 0.0
+
+    aliquota_ir = min(max(aliquota_ir, 0), 1)
+
+    nopat = ebit * (1 - aliquota_ir)
+    roic = dividir(nopat, capital_investido)
+
+    wacc_base = 0.08
+    eva = nopat - capital_investido * wacc_base
+
+    margem_ebitda = dividir(ebitda, receita_liquida)
+    pmr = dividir(clientes * 360, receita)
+    pmp = dividir(fornecedores * 360, custos)
+
+    ciclo = pmr - pmp if pd.notna(pmr) and pd.notna(pmp) else np.nan
+    ncg = ciclo * custos / 360 if pd.notna(ciclo) else np.nan
+
+    fcl = fco - capex if pd.notna(fco) else np.nan
+
+    # Cada fator possui um indicador de resultado específico.
+    if fator == "WACC":
+        wacc_novo = wacc_base * (1 + variacao)
+        original = eva
+        simulado = nopat - capital_investido * wacc_novo
+        unidade = "R$"
+
+    elif fator == "ROIC":
+        roic_novo = roic * (1 + variacao)
+        original = eva
+        nopat_novo = roic_novo * capital_investido
+        simulado = nopat_novo - capital_investido * wacc_base
+        unidade = "R$"
+
+    elif fator == "Margem EBITDA":
+        margem_nova = margem_ebitda * (1 + variacao)
+        original = ebitda
+        simulado = margem_nova * receita_liquida
+        unidade = "R$"
+
+    elif fator == "Receita":
+        receita_nova = receita * (1 + variacao)
+        receita_liquida_nova = receita_liquida * (1 + variacao)
+        original = ebitda
+        simulado = margem_ebitda * receita_liquida_nova
+        unidade = "R$"
+
+    elif fator == "PMR":
+        pmr_novo = pmr * (1 + variacao)
+        ciclo_novo = pmr_novo - pmp
+        ncg_nova = ciclo_novo * custos / 360
+
+        original = ncg
+        simulado = ncg_nova
+        unidade = "R$"
+
+    elif fator == "PMP":
+        pmp_novo = pmp * (1 + variacao)
+        ciclo_novo = pmr - pmp_novo
+        ncg_nova = ciclo_novo * custos / 360
+
+        original = ncg
+        simulado = ncg_nova
+        unidade = "R$"
+
+    elif fator == "Capex":
+        capex_novo = capex * (1 + variacao)
+        original = fcl
+        simulado = fco - capex_novo
+        unidade = "R$"
+
+    else:
+        return None, "Fator de sensibilidade não reconhecido."
+
+    if pd.isna(original) or pd.isna(simulado):
+        return None, (
+            "Não há dados suficientes para calcular essa simulação "
+            "no cenário e ano selecionados."
+        )
+
+    return {
+        "fator": fator,
+        "original": original,
+        "simulado": simulado,
+        "impacto": simulado - original,
+        "variacao": variacao,
+        "unidade": unidade,
+    }, None
+
+
+def _renderizar_simulacao(df, ano, cenario):
+
+    st.markdown(
+        """
+        <div class="sens-card-title">
+            Simulação de indicadores financeiros
+        </div>
+        <div class="sens-card-note">
+            Altere um fator e observe o impacto estimado
+            sobre o indicador relacionado.
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+    fatores_disponiveis = [
+        "WACC",
+        "ROIC",
+        "Margem EBITDA",
+        "Receita",
+        "PMR",
+        "PMP",
+        "Capex",
+    ]
+
+    fator = st.selectbox(
+        "Fator que deseja alterar",
+        options=fatores_disponiveis,
+        key="sens_fator_simulacao",
+    )
+
+    variacao = st.slider(
+        "Variação aplicada (%)",
+        min_value=-50,
+        max_value=50,
+        value=10,
+        step=5,
+        key="sens_variacao_simulacao",
+    ) / 100
+
+    resultado, erro = _simular_indicador(
+        df,
+        ano,
+        cenario,
+        fator,
+        variacao,
+    )
+
+    if erro:
+        st.warning(erro)
+        return
+
+    original = resultado["original"]
+    simulado = resultado["simulado"]
+    impacto = resultado["impacto"]
+
+    def formatar(valor):
+        return (
+            "R$ "
+            + _formatar_numero(valor / 1_000_000)
+            + " mi"
+        )
+
+    st.write("")
+
+    col1, col2, col3 = st.columns(3)
+
+    with col1:
+        st.markdown(
+            f"""
+            <div class="sens-kpi">
+                <div class="sens-kpi-label">Valor original</div>
+                <div class="sens-kpi-value">{formatar(original)}</div>
+                <div class="sens-kpi-note">Cenário de referência</div>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+
+    with col2:
+        st.markdown(
+            f"""
+            <div class="sens-kpi">
+                <div class="sens-kpi-label">Valor simulado</div>
+                <div class="sens-kpi-value">{formatar(simulado)}</div>
+                <div class="sens-kpi-note">
+                    Variação de {variacao * 100:+.0f}% em {fator}
+                </div>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+
+    with col3:
+        cor = "#258B68" if impacto >= 0 else "#C65B5B"
+
+        st.markdown(
+            f"""
+            <div class="sens-kpi">
+                <div class="sens-kpi-label">Impacto estimado</div>
+                <div class="sens-kpi-value" style="color:{cor}">
+                    {formatar(impacto)}
+                </div>
+                <div class="sens-kpi-note">
+                    Diferença entre os dois valores
+                </div>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+
+    st.write("")
+
+    grafico = pd.DataFrame({
+        "Situação": ["Original", "Simulado"],
+        "Valor (R$ mi)": [
+            original / 1_000_000,
+            simulado / 1_000_000,
+        ],
+    })
+
+    chart = (
+        alt.Chart(grafico)
+        .mark_bar(
+            cornerRadiusEnd=5,
+            color="#2E91C9",
+        )
+        .encode(
+            x=alt.X(
+                "Situação:N",
+                title=None,
+                sort=["Original", "Simulado"],
+            ),
+            y=alt.Y(
+                "Valor (R$ mi):Q",
+                title="Valor (R$ milhões)",
+                axis=alt.Axis(format=",.2f"),
+            ),
+            tooltip=[
+                alt.Tooltip("Situação:N"),
+                alt.Tooltip(
+                    "Valor (R$ mi):Q",
+                    format=",.2f",
+                ),
+            ],
+        )
+        .properties(height=300)
+    )
+
+    st.altair_chart(
+        chart,
+        use_container_width=True,
+    )
+
+    st.markdown(
+        """
+        <div class="sens-note">
+            <strong>Como interpretar:</strong>
+            a simulação altera um fator por vez e mantém os demais
+            valores constantes. O resultado representa uma estimativa
+            matemática baseada nas fórmulas financeiras utilizadas.
+
+            <br><br>
+
+            <strong>Limitação:</strong>
+            os resultados não representam previsões nem comprovam
+            relações causais. As simulações de PMR e PMP utilizam
+            uma estimativa simplificada da necessidade de capital
+            de giro.
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
 
 def _cabecalho(anos, cenarios):
 
@@ -565,6 +884,23 @@ def render_sensibilidade():
             return
 
         ano, cenario = _cabecalho(anos, cenarios)
+        modo_sensibilidade = st.radio(
+            "Tipo de análise",
+            options=[
+                "Regressão atual",
+                "Simulação de indicadores",
+            ],
+            horizontal=True,
+            key="sens_modo_analise",
+        )
+
+        if modo_sensibilidade == "Simulação de indicadores":
+            _renderizar_simulacao(
+                df,
+                ano,
+                cenario,
+            )
+            return
 
         resultado, erro = _calcular_sensibilidade(df, ano)
 

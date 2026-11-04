@@ -201,6 +201,114 @@ INDICADORES = {
         "grupo": "Valor econômico",
         "formato": "moeda",
         "descricao": "Estimativa do valor agregado pelo mercado."
+    },
+
+    "ROE": {
+        "grupo": "Rentabilidade e resultado",
+        "formato": "percentual",
+        "descricao": "Mede o retorno gerado sobre o patrimônio líquido médio."
+    },
+    "DuPont - Margem Líquida": {
+        "grupo": "Análise DuPont",
+        "formato": "percentual",
+        "descricao": "Representa a parcela da receita convertida em lucro líquido."
+    },
+    "DuPont - Giro do Ativo": {
+        "grupo": "Análise DuPont",
+        "formato": "numero",
+        "descricao": "Mede a capacidade dos ativos de gerar receita."
+    },
+    "DuPont - Alavancagem": {
+        "grupo": "Análise DuPont",
+        "formato": "numero",
+        "descricao": "Relaciona os ativos médios ao patrimônio líquido médio."
+    },
+    "ROE DuPont": {
+        "grupo": "Análise DuPont",
+        "formato": "percentual",
+        "descricao": "Resultado do ROE calculado pela decomposição DuPont."
+    },
+
+    "CCL": {
+        "grupo": "Capital de giro e prazos",
+        "formato": "moeda",
+        "descricao": "Capital circulante líquido: diferença entre ativo e passivo circulantes."
+    },
+    "PMR": {
+        "grupo": "Capital de giro e prazos",
+        "formato": "dias",
+        "descricao": "Prazo médio de recebimento das vendas."
+    },
+    "PMP": {
+        "grupo": "Capital de giro e prazos",
+        "formato": "dias",
+        "descricao": "Prazo médio de pagamento aos fornecedores."
+    },
+    "Ciclo Financeiro": {
+        "grupo": "Capital de giro e prazos",
+        "formato": "dias",
+        "descricao": "Diferença entre o prazo médio de recebimento e o de pagamento."
+    },
+    "Necessidade de Capital de Giro": {
+        "grupo": "Capital de giro e prazos",
+        "formato": "moeda",
+        "descricao": "Estimativa dos recursos necessários para financiar o ciclo financeiro."
+    },
+
+    "Taxa de Conversão da Receita em Caixa": {
+        "grupo": "Fluxo de caixa",
+        "formato": "percentual",
+        "descricao": "Relaciona os recebimentos de caixa à receita operacional."
+    },
+    "FCO": {
+        "grupo": "Fluxo de caixa",
+        "formato": "moeda",
+        "descricao": "Fluxo de caixa operacional."
+    },
+    "FCO / EBITDA": {
+        "grupo": "Fluxo de caixa",
+        "formato": "multiplo",
+        "descricao": "Relaciona o fluxo de caixa operacional ao EBITDA."
+    },
+    "FCO / Lucro Líquido": {
+        "grupo": "Fluxo de caixa",
+        "formato": "multiplo",
+        "descricao": "Relaciona o fluxo de caixa operacional ao lucro líquido."
+    },
+    "FCL": {
+        "grupo": "Fluxo de caixa",
+        "formato": "moeda",
+        "descricao": "Fluxo de caixa livre após os investimentos."
+    },
+    "Capex / Receita": {
+        "grupo": "Fluxo de caixa",
+        "formato": "percentual",
+        "descricao": "Representa os investimentos em relação à receita."
+    },
+    "Capex / D&A": {
+        "grupo": "Fluxo de caixa",
+        "formato": "multiplo",
+        "descricao": "Relaciona os investimentos à depreciação e amortização."
+    },
+    "Cobertura de Juros": {
+        "grupo": "Fluxo de caixa",
+        "formato": "multiplo",
+        "descricao": "Relaciona o fluxo de caixa operacional às despesas financeiras utilizadas como referência."
+    },
+    "FCO / Dívida Bruta": {
+        "grupo": "Fluxo de caixa",
+        "formato": "percentual",
+        "descricao": "Relaciona o fluxo de caixa operacional à dívida bruta."
+    },
+    "Payout em Caixa": {
+        "grupo": "Fluxo de caixa",
+        "formato": "percentual",
+        "descricao": "Relaciona a distribuição de caixa aos acionistas ao lucro líquido."
+    },
+    "Cobertura de Dividendos": {
+        "grupo": "Fluxo de caixa",
+        "formato": "multiplo",
+        "descricao": "Relaciona o fluxo de caixa livre à distribuição de caixa aos acionistas."
     }
 }
 
@@ -649,7 +757,11 @@ def _tabela_indicadores(df, mapa_cenarios):
         if formato == "moeda":
             formato_numero = "R$ %.2f"
         elif formato == "percentual":
-            formato_numero = "%.4f"
+            formato_numero = "%.2%%"
+        elif formato == "dias":
+            formato_numero = "%.1f dias"
+        elif formato == "multiplo":
+            formato_numero = "%.2fx"
         else:
             formato_numero = "%.2f"
 
