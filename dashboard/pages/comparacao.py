@@ -127,9 +127,6 @@ COLUNAS_PERCENTUAIS = {
 
 COLUNAS_EM_DIAS = {"PMR", "PMP", "Ciclo Financeiro"}
 
-COLUNAS_MONETARIAS = {"EBITDA", "EVA"}
-COLUNAS_PERCENTUAIS = {"Margem EBITDA", "Margem Líquida", "ROIC"}
-
 
 def _rotulo_cenario(valor):
     if pd.isna(valor):
@@ -149,7 +146,6 @@ def _rotulo_cenario(valor):
 
 
 def _extrair_ano(valor):
-    """Extrai o número do ano de valores como 1, '1' ou 'Ano 1'."""
     if pd.isna(valor):
         return pd.NA
 
@@ -182,8 +178,7 @@ def _preparar_dados():
             + ", ".join(sorted(ausentes))
         )
 
-    # Para os anos, tenta primeiro a coluna que o carregador já calculou.
-    # Se ela não existir ou estiver vazia, extrai os números da coluna Ano.
+
     if "Ano_Numero" in df.columns:
         anos = pd.to_numeric(df["Ano_Numero"], errors="coerce")
     else:
@@ -192,7 +187,7 @@ def _preparar_dados():
     if anos.isna().all() and "Ano" in df.columns:
         anos = df["Ano"].map(_extrair_ano)
 
-    # A coluna Cenario pode conter nomes em texto. Não converter para número.
+
     dados = df.copy()
     dados["Ano_Numero"] = pd.to_numeric(anos, errors="coerce")
     dados["Cenario"] = dados["Cenario"].astype("string").str.strip()
@@ -208,10 +203,7 @@ def _preparar_dados():
             errors="coerce",
         )
 
-    for coluna in COLUNAS_COMPARACAO:
-        dados[coluna] = pd.to_numeric(dados[coluna], errors="coerce")
 
-    # A disponibilidade dos anos depende somente da coluna de ano.
     return dados.dropna(subset=["Ano_Numero"])
 
 
@@ -325,8 +317,7 @@ def _tabela_comparacao(dados_ano, selecionados):
         dados_ano["Cenario"].isin(selecionados)
     ].copy()
 
-    # Não agrega automaticamente duplicatas: não há uma regra de negócio
-    # definida para resumir mais de uma linha do mesmo cenário e ano.
+
     duplicados = selecionados_df.duplicated(
         subset=["Cenario"],
         keep=False,

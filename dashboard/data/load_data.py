@@ -8,7 +8,7 @@ ROOT_DIR = Path(__file__).resolve().parents[2]
 CAMINHO_PLANILHA = (
     ROOT_DIR
     / "documentos"
-    / "entrega 1"
+    / "entrega 2"
     / "contabilidade e finanças"
     / "Analise_Financeira.xlsx"
 )

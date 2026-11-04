@@ -1,3 +1,5 @@
+import re
+
 import altair as alt
 import pandas as pd
 import streamlit as st
@@ -89,6 +91,23 @@ def _moeda_mi(valor):
     texto = texto.replace(".", ",").replace("X", ".")
     sinal = "−" if float(valor) < 0 else ""
     return f"{sinal}R$ {texto} mi"
+
+
+def _rotulo_cenario(valor):
+    if pd.isna(valor):
+        return "Cenário sem identificação"
+
+    try:
+        return f"Cenário {int(float(valor))}"
+    except (TypeError, ValueError):
+        pass
+
+    encontrados = re.findall(r"\d+", str(valor))
+
+    if encontrados:
+        return f"Cenário {int(encontrados[-1])}"
+
+    return str(valor).strip()
 
 
 def _card_metrica(rotulo, valor, detalhe):
@@ -242,10 +261,7 @@ def render_ranking():
         divisor = 1_000_000 if formato == "moeda" else 1
         dados_ano["Valor"] = dados_ano[indicador] / divisor
 
-        dados_ano["Cenário"] = dados_ano["Cenario"].map(
-            lambda numero: f"Cenário {int(numero)}"
-            if pd.notna(numero) else "Cenário sem identificação"
-        )
+        dados_ano["Cenário"] = dados_ano["Cenario"].map(_rotulo_cenario)
 
         maior = dados_ano.iloc[0]
         menor = dados_ano.iloc[-1]
