@@ -28,25 +28,34 @@ A plataforma também disponibiliza relatórios gerenciais e um dashboard interat
 
 <pre>
 │
+├── dashboard
+│
 ├── data
 │   ├── raw                      # base original (Demonstrativo Fecap v3.csv)
-│   └── staging                  # bases normalizadas e resumo estatístico
+│   ├── staging                  # base normalizada e resumo estatístico
+│   └── processed                # base final com dicionário de dados
 │
 ├── documentos
 │   └── entrega 1
-│       ├── análise inferencial de dados
-│       ├── contabilidade e finanças
-│       ├── ES e ML
-│       └── pi_ciência de dados
-│
+│   │    ├── análise inferencial de dados
+│   │    ├── contabilidade e finanças
+│   │    ├── ES e ML
+│   │    └── pi_ciência de dados
+│   └── entrega 2
+│        ├── análise inferencial de dados
+│        ├── contabilidade e finanças
+│        ├── ES e ML
+│        └── pi_ciência de dados
 ├── imagens
 │
 ├── notebooks
 │   ├── 01_exploracao.ipynb
 │   ├── 02_tratamento.ipynb
-│   └── 03_kpis.ipynb
+│   ├── 03_kpis.ipynb
+│   ├── 04_analise.ipynb
+│   └── 05_analise_financeira.ipynb
 │
-├── staging                      # dados_tratados.csv (gerado pelo notebook 02)
+│                    
 │
 └── README.md
 </pre>
@@ -94,6 +103,8 @@ Execute os notebooks da pasta `notebooks` **nesta ordem**, pois cada um usa arqu
 1. `01_exploracao.ipynb` – exploração da base original (`data/raw/Demonstrativo Fecap v3.csv`)
 2. `02_tratamento.ipynb` – limpeza e transformação; gera `staging/dados_tratados.csv`
 3. `03_kpis.ipynb` – cálculo dos indicadores financeiros; gera a planilha `Analise_Financeira.xlsx`
+4. `04_analise.ipynb` – utiliza os dados e indicadores preparados nos notebooks anteriores, evitando a repetição das etapas de exploração, tratamento e cálculo dos KPIs.
+5. `05_analise_financeira.ipynb` - complementa os notebooks `03_kpis.ipynb` e `04_analise.ipynb`, sem recalcular os indicadores ou repetir os gráficos já produzidos, preparando comparações, alertas, simulações e variações.
 
 > ⚠️ Os notebooks usam caminhos relativos (ex.: `../data/raw/...`), então devem ser executados de dentro da pasta `notebooks`, sem mover os arquivos de lugar.
 
