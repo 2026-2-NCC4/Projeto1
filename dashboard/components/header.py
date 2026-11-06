@@ -30,7 +30,7 @@ BUSCA_POR_PAGINA = {
     },
     "Comparação": {
         "Comparação de cenários": ["comparar", "comparação", "comparacao", "cenários", "cenarios", "lado a lado"],
-        "EBITDA × Margem EBITDA": ["ebitda", "margem ebitda"],
+        "Gráfico comparativo": ["gráfico", "grafico", "barras", "comparar", "indicadores", "ebitda", "margem ebitda", "roe", "fco", "fcl", "capital de giro"],
     },
     "Ranking": {
         "Ranking de cenários": ["ranking", "melhores", "piores", "classificação", "classificacao"],
@@ -94,7 +94,7 @@ AJUDA_POR_PAGINA = {
     "Comparação": (
         "A página de Comparação coloca cenários lado a lado no mesmo ano. "
         "Escolha o ano e os cenários que quer comparar para ver todos os indicadores, "
-        "agrupados por tema, e a posição de cada um no gráfico de EBITDA e Margem EBITDA."
+        "agrupados por tema. O gráfico de barras compara os cenários escolhidos em grupos de indicadores, como resultado e caixa, margens e retornos ou prazos."
     ),
     "Ranking": (
         "O Ranking ordena os cenários pelo indicador escolhido no ano selecionado. "

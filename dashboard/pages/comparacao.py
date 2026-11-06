@@ -269,63 +269,187 @@ def _formatar_indicador(indicador, valor):
     return f"{float(valor):.2f}".replace(".", ",")
 
 
-def _grafico_cenarios(dados, selecionados):
-    dados_grafico = dados.dropna(
-        subset=["Cenario", "EBITDA", "Margem EBITDA"]
-    ).copy()
+GRUPOS_GRAFICO = {
+    "Resultado e caixa (R$)": ["EBITDA", "NOPAT", "EVA", "FCO", "FCL"],
+    "Capital de giro e valor (R$)": [
+        "CCL",
+        "Necessidade de Capital de Giro",
+        "MVA Aproximado",
+    ],
+    "Margens e retornos (%)": [
+        "Margem EBITDA",
+        "Margem Líquida",
+        "ROIC",
+        "ROE",
+    ],
+    "Conversão e investimentos (%)": [
+        "Taxa de Conversão da Receita em Caixa",
+        "FCO / Dívida Bruta",
+        "Investimentos / Receita",
+        "Distribuição / Lucro Líquido",
+    ],
+    "Prazos (dias)": ["PMR", "PMP", "Ciclo Financeiro"],
+    "Coberturas e giro (vezes)": [
+        "FCO / EBITDA",
+        "FCO / Lucro Líquido",
+        "Cobertura de Juros",
+        "Cobertura de Dividendos",
+        "Investimentos / Depreciação",
+        "DuPont - Giro do Ativo",
+        "DuPont - Alavancagem",
+    ],
+}
 
-    if dados_grafico.empty:
+CORES_CENARIOS = [
+    "#1677E8",
+    "#F59E0B",
+    "#10B981",
+    "#8B5CF6",
+    "#EF4444",
+    "#06B6D4",
+    "#EC4899",
+    "#84CC16",
+]
+
+
+def _escala_grupo(valores, formato):
+    if formato == "moeda":
+        if valores.abs().max() >= 1_000_000_000:
+            return 1 / 1_000_000_000, "R$ bilhões"
+
+        return 1 / 1_000_000, "R$ milhões"
+
+    if formato == "percentual":
+        return 100, "%"
+
+    if formato == "dias":
+        return 1, "dias"
+
+    if formato == "multiplo":
+        return 1, "vezes"
+
+    return 1, ""
+
+
+def _numero_curto(valor):
+    return (
+        f"{valor:,.1f}"
+        .replace(",", "X")
+        .replace(".", ",")
+        .replace("X", ".")
+    )
+
+
+def _grafico_comparacao(dados, selecionados, indicadores):
+    if not selecionados:
+        st.info("Selecione pelo menos um cenário no filtro acima.")
+        return
+
+    existentes = [
+        indicador
+        for indicador in indicadores
+        if indicador in dados.columns
+    ]
+
+    base = dados.loc[dados["Cenario"].isin(selecionados)].copy()
+
+    registros = []
+
+    for _, linha in base.iterrows():
+        for indicador in existentes:
+            registros.append({
+                "Cenário": _rotulo_cenario(linha["Cenario"]),
+                "Indicador": indicador,
+                "bruto": linha[indicador],
+            })
+
+    longo = pd.DataFrame(registros)
+
+    if longo.empty:
+        st.info("Não há valores para os cenários e indicadores escolhidos.")
+        return
+
+    sem_valor = sorted(
+        longo.loc[longo["bruto"].isna(), "Indicador"].unique().tolist()
+    )
+
+    longo = longo.dropna(subset=["bruto"]).copy()
+
+    if longo.empty:
         st.info(
-            "Não há valores de EBITDA e Margem EBITDA suficientes "
-            "para montar o gráfico neste ano."
+            "Os indicadores escolhidos não têm valores neste ano. "
+            "Os que usam o ano anterior começam no Ano 2."
         )
         return
 
-    dados_grafico["EBITDA_mi"] = dados_grafico["EBITDA"] / 1_000_000
-    dados_grafico["Cenario_label"] = dados_grafico["Cenario"].map(
-        _rotulo_cenario
-    )
-    dados_grafico["Selecionado"] = dados_grafico["Cenario"].isin(
-        selecionados
+    formato = INDICADORES.get(existentes[0], {}).get("formato", "numero")
+    fator, unidade = _escala_grupo(longo["bruto"], formato)
+
+    longo["Valor"] = longo["bruto"] * fator
+    longo["Rótulo"] = longo["Valor"].map(_numero_curto)
+
+    ordem_cenarios = [_rotulo_cenario(c) for c in selecionados]
+    cores = [
+        CORES_CENARIOS[i % len(CORES_CENARIOS)]
+        for i in range(len(ordem_cenarios))
+    ]
+
+    altura = max(260, len(existentes) * len(ordem_cenarios) * 26 + 70)
+
+    base_grafico = alt.Chart(longo).encode(
+        y=alt.Y(
+            "Indicador:N",
+            sort=existentes,
+            title=None,
+            axis=alt.Axis(labelLimit=260),
+        ),
+        yOffset=alt.YOffset("Cenário:N", sort=ordem_cenarios),
     )
 
-    grafico = (
-        alt.Chart(dados_grafico)
-        .mark_circle(size=75, opacity=0.8)
-        .encode(
-            x=alt.X(
-                "EBITDA_mi:Q",
-                title="EBITDA (R$ mi)",
-                axis=alt.Axis(format=",.1f"),
-            ),
-            y=alt.Y(
-                "Margem EBITDA:Q",
-                title="Margem EBITDA",
-                axis=alt.Axis(format=".0%"),
-            ),
-            color=alt.condition(
-                "datum.Selecionado",
-                alt.value("#1677E8"),
-                alt.value("#AFC3D8"),
-            ),
-            tooltip=[
-                alt.Tooltip("Cenario_label:N", title="Cenário"),
-                alt.Tooltip(
-                    "EBITDA_mi:Q",
-                    title="EBITDA (R$ mi)",
-                    format=",.2f",
-                ),
-                alt.Tooltip(
-                    "Margem EBITDA:Q",
-                    title="Margem EBITDA",
-                    format=".2%",
-                ),
-            ],
+    barras = base_grafico.mark_bar(cornerRadiusEnd=3).encode(
+        x=alt.X(
+            "Valor:Q",
+            title=unidade,
+            axis=alt.Axis(labelAngle=0, format=",.1f"),
+        ),
+        color=alt.Color(
+            "Cenário:N",
+            sort=ordem_cenarios,
+            scale=alt.Scale(domain=ordem_cenarios, range=cores),
+            legend=alt.Legend(title=None, orient="bottom"),
+        ),
+        tooltip=[
+            alt.Tooltip("Cenário:N"),
+            alt.Tooltip("Indicador:N"),
+            alt.Tooltip("Valor:Q", title=unidade or "Valor", format=",.2f"),
+        ],
+    )
+
+    rotulos_positivos = (
+        base_grafico
+        .transform_filter("datum.Valor >= 0")
+        .mark_text(align="left", dx=4, fontSize=11, color="#2B3A4E")
+        .encode(x="Valor:Q", text="Rótulo:N")
+    )
+
+    rotulos_negativos = (
+        base_grafico
+        .transform_filter("datum.Valor < 0")
+        .mark_text(align="right", dx=-4, fontSize=11, color="#2B3A4E")
+        .encode(x="Valor:Q", text="Rótulo:N")
+    )
+
+    st.altair_chart(
+        (barras + rotulos_positivos + rotulos_negativos).properties(
+            height=altura
+        ),
+        use_container_width=True,
+    )
+
+    if sem_valor:
+        st.caption(
+            "Sem valor neste ano: " + ", ".join(sem_valor) + "."
         )
-        .properties(height=340)
-    )
-
-    st.altair_chart(grafico, use_container_width=True)
 
 
 def _indicadores_ordenados(colunas):
@@ -362,8 +486,8 @@ def _tabela_comparacao(dados_ano, selecionados):
         if len(selecionados) < 2:
             st.markdown(
                 '<div class="comp-card-note">'
-                "Selecione pelo menos dois cenários para ver os indicadores "
-                "lado a lado. O gráfico mostra todos os cenários do ano."
+                "Selecione pelo menos dois cenários para ver todos os "
+                "indicadores lado a lado."
                 "</div>",
                 unsafe_allow_html=True,
             )
@@ -549,6 +673,19 @@ def render_comparacao():
             .tolist()
         )
 
+        if "comp_cenarios" not in st.session_state:
+            st.session_state["comp_cenarios"] = (
+                dados_ano.dropna(subset=["EBITDA"])
+                .nlargest(2, "EBITDA")["Cenario"]
+                .tolist()
+            )
+
+        st.session_state["comp_cenarios"] = [
+            cenario
+            for cenario in st.session_state["comp_cenarios"]
+            if cenario in cenarios
+        ]
+
         with st.container(key="comp_selecao"):
             selecionados = st.multiselect(
                 "Cenários para comparar",
@@ -562,19 +699,63 @@ def render_comparacao():
 
         with col_grafico:
             with st.container(key="comp_grafico"):
+                grupos_disponiveis = {
+                    nome: [
+                        indicador
+                        for indicador in indicadores
+                        if indicador in dados_ano.columns
+                        and dados_ano[indicador].notna().any()
+                    ]
+                    for nome, indicadores in GRUPOS_GRAFICO.items()
+                }
+                grupos_disponiveis = {
+                    nome: indicadores
+                    for nome, indicadores in grupos_disponiveis.items()
+                    if indicadores
+                }
+
                 st.markdown(
-                    '<div class="comp-card-title">EBITDA × Margem EBITDA</div>',
+                    '<div class="comp-card-title">'
+                    "Comparação dos cenários selecionados"
+                    "</div>",
                     unsafe_allow_html=True,
                 )
                 st.markdown(
                     '<div class="comp-card-note">'
-                    "Cada ponto é um cenário do ano escolhido. Os cenários "
-                    "selecionados aparecem em azul."
+                    "Cada cor é um cenário. Escolha o grupo e os indicadores "
+                    "para ver os cenários lado a lado."
                     "</div>",
                     unsafe_allow_html=True,
                 )
 
-                _grafico_cenarios(dados_ano, selecionados)
+                if not grupos_disponiveis:
+                    st.info("Não há indicadores suficientes para montar o gráfico.")
+                else:
+                    escolha_grupo, escolha_indicadores = st.columns([1, 1.4])
+
+                    with escolha_grupo:
+                        nome_grupo = st.selectbox(
+                            "Grupo de indicadores",
+                            options=list(grupos_disponiveis.keys()),
+                            key="comp_grupo_grafico",
+                        )
+
+                    opcoes_grupo = grupos_disponiveis[nome_grupo]
+
+                    with escolha_indicadores:
+                        indicadores_escolhidos = st.multiselect(
+                            "Indicadores no gráfico",
+                            options=opcoes_grupo,
+                            default=opcoes_grupo,
+                            key=f"comp_indicadores_{nome_grupo}",
+                        )
+
+                    if indicadores_escolhidos:
+                        _grafico_comparacao(
+                            dados_ano, selecionados, indicadores_escolhidos
+                        )
+                    else:
+                        st.info("Selecione pelo menos um indicador.")
 
         with col_tabela:
             _tabela_comparacao(dados_ano, selecionados)
@@ -584,8 +765,14 @@ def render_comparacao():
         como_interpretar(
             "comp",
             [
-                "**Gráfico:** cada ponto é um cenário. Quanto mais à direita, "
-                "maior o EBITDA; quanto mais acima, maior a margem.",
+                "**Gráfico:** cada cor é um cenário escolhido no filtro. As barras "
+                "mostram o valor de cada indicador no ano selecionado, com o "
+                "número ao lado.",
+                "**Grupos:** os indicadores são agrupados pela mesma unidade "
+                "(reais, %, dias ou vezes) para que as barras possam ser "
+                "comparadas entre si.",
+                "**Barras para a esquerda:** valores negativos, como um FCL "
+                "negativo.",
                 "**Comparação lado a lado:** escolha dois ou mais cenários para "
                 "ver todos os indicadores do mesmo ano, agrupados por tema.",
                 "**Vazio ou N/D:** indicadores que usam o ano anterior (ROE, "
@@ -598,6 +785,6 @@ def render_comparacao():
 
         st.caption(
             "Fonte: aba _Indicadores da planilha Analise_Financeira.xlsx. "
-            "O gráfico e as tabelas usam a mesma unidade: valores em reais "
-            "exibidos em milhões ou bilhões."
+            "Valores em reais aparecem em milhões ou bilhões; percentuais "
+            "em %, prazos em dias e coberturas em vezes."
         )
