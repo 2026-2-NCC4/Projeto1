@@ -1,9 +1,8 @@
-
 from pathlib import Path
 
 import streamlit as st
 
-from components.auth import render_auth_page, usuario_logado
+from components.auth import aplicar_cookie_pendente, render_auth_page, usuario_logado
 from components.sidebar import render_sidebar
 from components.header import render_header
 
@@ -27,7 +26,9 @@ st.set_page_config(
     initial_sidebar_state="expanded",
 )
 
-# Verifica se o usuário está autenticado
+
+aplicar_cookie_pendente()
+
 if not usuario_logado():
     render_auth_page()
     st.stop()
@@ -36,7 +37,6 @@ st.session_state.setdefault("pagina_atual", "Visão Geral")
 st.session_state.setdefault("sidebar_recolhido", False)
 
 
-# Carrega o CSS original do dashboard
 CSS = Path(__file__).resolve().parent / "assets" / "dashboard_shell.css"
 
 if CSS.is_file():
@@ -55,7 +55,6 @@ if st.session_state.sidebar_recolhido:
 pagina_sidebar = render_sidebar()
 
 
-# Permite que o cabeçalho solicite navegação para Configurações
 destino = st.session_state.pop("cti_navegar_para", None)
 ultima_pagina_sidebar = st.session_state.get(
     "_cti_ultima_pagina_sidebar"
@@ -74,11 +73,9 @@ st.session_state["_cti_ultima_pagina_sidebar"] = pagina_sidebar
 pagina = st.session_state.get("pagina_atual", pagina_sidebar)
 
 
-# Renderiza o cabeçalho
 render_header(pagina)
 
 
-# Exibe a página selecionada
 if pagina == "Visão Geral":
     render_visao_geral()
 

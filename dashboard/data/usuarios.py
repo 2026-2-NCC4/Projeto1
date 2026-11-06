@@ -7,7 +7,7 @@ import time
 from contextlib import contextmanager
 from pathlib import Path
 
-# Banco local com os usuários cadastrados (não versionado no git)
+
 CAMINHO_BANCO = Path(__file__).resolve().parent / "usuarios.db"
 
 ALGORITMO = "pbkdf2_sha256"
@@ -15,19 +15,20 @@ ITERACOES = 600_000
 
 EMAIL_REGEX = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 
-# Recuperação de senha
+
 VALIDADE_CODIGO_MINUTOS = 15
 MAX_TENTATIVAS_CODIGO = 5
 INTERVALO_REENVIO_SEGUNDOS = 60
 
+VALIDADE_SESSAO_DIAS = 30
+
 
 class ErroCadastro(ValueError):
-    """Erro de validação com mensagem pronta para exibir ao usuário."""
+    pass
 
 
 @contextmanager
 def _conectar():
-    """Abre o banco, confirma a transação no final e sempre fecha a conexão."""
     conexao = sqlite3.connect(CAMINHO_BANCO)
     conexao.row_factory = sqlite3.Row
 
@@ -42,7 +43,7 @@ def _conectar():
                     criado_em TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
                 )
             """)
-            # Um código de redefinição ativo por e-mail (guardado só como hash)
+
             conexao.execute("""
                 CREATE TABLE IF NOT EXISTS redefinicoes_senha (
                     email TEXT PRIMARY KEY COLLATE NOCASE,
@@ -52,7 +53,7 @@ def _conectar():
                     tentativas INTEGER NOT NULL DEFAULT 0
                 )
             """)
-            # Preferências escolhidas na página de Configurações
+
             conexao.execute("""
                 CREATE TABLE IF NOT EXISTS preferencias (
                     usuario_id INTEGER PRIMARY KEY,
@@ -60,12 +61,17 @@ def _conectar():
                     menu_recolhido INTEGER NOT NULL DEFAULT 0
                 )
             """)
+            conexao.execute("""
+                CREATE TABLE IF NOT EXISTS sessoes_persistentes (
+                    token_hash TEXT PRIMARY KEY,
+                    usuario_id INTEGER NOT NULL,
+                    expira_em REAL NOT NULL
+                )
+            """)
             yield conexao
     finally:
         conexao.close()
 
-
-# ---------- Senhas ----------
 
 def gerar_hash(senha):
     salt = secrets.token_bytes(16)
@@ -91,12 +97,8 @@ def verificar_senha(senha, senha_hash):
     return hmac.compare_digest(digest.hex(), esperado)
 
 
-# Usado para gastar o mesmo tempo quando o e-mail não existe,
-# evitando revelar quais e-mails estão cadastrados.
 _HASH_FICTICIO = gerar_hash(secrets.token_hex(16))
 
-
-# ---------- Validação ----------
 
 def normalizar_email(email):
     return email.strip().lower()
@@ -129,10 +131,7 @@ def validar_senha(senha, confirmar):
         raise ErroCadastro("As senhas não coincidem.")
 
 
-# ---------- Operações ----------
-
 def cadastrar_usuario(nome, email, senha, confirmar):
-    """Cria o usuário e devolve seus dados públicos (id, nome, email)."""
     validar_cadastro(nome, email, senha, confirmar)
 
     nome = nome.strip()
@@ -151,7 +150,6 @@ def cadastrar_usuario(nome, email, senha, confirmar):
 
 
 def autenticar(email, senha):
-    """Devolve os dados públicos do usuário, ou None se as credenciais forem inválidas."""
     with _conectar() as conexao:
         linha = conexao.execute(
             "SELECT id, nome, email, senha_hash FROM usuarios WHERE email = ?",
@@ -168,15 +166,57 @@ def autenticar(email, senha):
     return {"id": linha["id"], "nome": linha["nome"], "email": linha["email"]}
 
 
-# ---------- Recuperação de senha ----------
+def _hash_token(token):
+    return hashlib.sha256(token.encode("utf-8")).hexdigest()
+
+
+def criar_sessao_persistente(usuario_id):
+    token = secrets.token_urlsafe(32)
+    agora = time.time()
+
+    with _conectar() as conexao:
+        conexao.execute(
+            "DELETE FROM sessoes_persistentes WHERE expira_em < ?", (agora,)
+        )
+        conexao.execute(
+            "INSERT INTO sessoes_persistentes (token_hash, usuario_id, expira_em) "
+            "VALUES (?, ?, ?)",
+            (_hash_token(token), usuario_id, agora + VALIDADE_SESSAO_DIAS * 86400),
+        )
+
+    return token
+
+
+def usuario_por_token(token):
+    if not token:
+        return None
+
+    with _conectar() as conexao:
+        linha = conexao.execute(
+            "SELECT u.id, u.nome, u.email FROM sessoes_persistentes s "
+            "JOIN usuarios u ON u.id = s.usuario_id "
+            "WHERE s.token_hash = ? AND s.expira_em > ?",
+            (_hash_token(token), time.time()),
+        ).fetchone()
+
+    if linha is None:
+        return None
+
+    return {"id": linha["id"], "nome": linha["nome"], "email": linha["email"]}
+
+
+def encerrar_sessao_persistente(token):
+    if not token:
+        return
+
+    with _conectar() as conexao:
+        conexao.execute(
+            "DELETE FROM sessoes_persistentes WHERE token_hash = ?",
+            (_hash_token(token),),
+        )
+
 
 def gerar_codigo_redefinicao(email):
-    """Cria um código de 6 dígitos para redefinir a senha.
-
-    Devolve (nome, codigo) quando o e-mail tem conta. Devolve None se não
-    houver conta ou se um código acabou de ser enviado — a tela mostra a
-    mesma mensagem nos dois casos, para não revelar quais e-mails existem.
-    """
     email = normalizar_email(email)
     agora = time.time()
 
@@ -209,7 +249,6 @@ def gerar_codigo_redefinicao(email):
 
 
 def redefinir_senha(email, codigo, senha, confirmar):
-    """Troca a senha se o código for válido. Erros vêm como ErroCadastro."""
     email = normalizar_email(email)
     codigo = codigo.strip()
 
@@ -246,13 +285,15 @@ def redefinir_senha(email, codigo, senha, confirmar):
             "UPDATE usuarios SET senha_hash = ? WHERE email = ?",
             (gerar_hash(senha), email),
         )
+        conexao.execute(
+            "DELETE FROM sessoes_persistentes WHERE usuario_id IN "
+            "(SELECT id FROM usuarios WHERE email = ?)",
+            (email,),
+        )
         conexao.execute("DELETE FROM redefinicoes_senha WHERE email = ?", (email,))
 
 
-# ---------- Configurações da conta ----------
-
 def obter_usuario(usuario_id):
-    """Dados públicos do usuário, com a data de cadastro. None se não existir."""
     with _conectar() as conexao:
         linha = conexao.execute(
             "SELECT id, nome, email, criado_em FROM usuarios WHERE id = ?",
@@ -298,10 +339,12 @@ def alterar_senha(usuario_id, senha_atual, nova, confirmar):
             "UPDATE usuarios SET senha_hash = ? WHERE id = ?",
             (gerar_hash(nova), usuario_id),
         )
+        conexao.execute(
+            "DELETE FROM sessoes_persistentes WHERE usuario_id = ?", (usuario_id,)
+        )
 
 
 def excluir_conta(usuario_id, senha):
-    """Apaga o usuário e tudo ligado a ele. Pede a senha como confirmação."""
     if not senha:
         raise ErroCadastro("Informe sua senha para confirmar.")
 
@@ -312,6 +355,7 @@ def excluir_conta(usuario_id, senha):
         ).fetchone()["email"]
 
         conexao.execute("DELETE FROM preferencias WHERE usuario_id = ?", (usuario_id,))
+        conexao.execute("DELETE FROM sessoes_persistentes WHERE usuario_id = ?", (usuario_id,))
         conexao.execute("DELETE FROM redefinicoes_senha WHERE email = ?", (email,))
         conexao.execute("DELETE FROM usuarios WHERE id = ?", (usuario_id,))
 

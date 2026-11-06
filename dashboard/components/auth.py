@@ -4,6 +4,7 @@ from html import escape
 from pathlib import Path
 
 import streamlit as st
+import streamlit.components.v1 as components
 
 from components.carousel import render_carousel
 from data.envio_email import configuracao_smtp, enviar_codigo_redefinicao
@@ -12,13 +13,19 @@ from data.usuarios import (
     ErroCadastro,
     autenticar,
     cadastrar_usuario,
+    criar_sessao_persistente,
+    encerrar_sessao_persistente,
     gerar_codigo_redefinicao,
     normalizar_email,
     obter_preferencias,
     redefinir_senha,
+    usuario_por_token,
 )
 
 ASSETS = Path(__file__).resolve().parent.parent / "assets"
+
+NOME_COOKIE = "cti_sessao"
+VALIDADE_COOKIE_SEGUNDOS = 30 * 24 * 60 * 60
 
 MAX_TENTATIVAS = 5
 BLOQUEIO_SEGUNDOS = 60
@@ -266,21 +273,72 @@ PAGE_STYLE = """
 """
 
 
-# ---------- Sessão ----------
+def _token_do_cookie():
+    try:
+        return st.context.cookies.get(NOME_COOKIE)
+    except Exception:
+        return None
 
-def usuario_logado():
-    """Devolve o usuário autenticado nesta sessão (dict com id, nome e email) ou None."""
-    return st.session_state.get("usuario")
 
-
-def _iniciar_sessao(usuario):
-    st.session_state.usuario = usuario
-
-    # Preferências salvas em Configurações
+def _aplicar_preferencias(usuario):
     preferencias = obter_preferencias(usuario["id"])
+
     if preferencias["pagina_inicial"]:
         st.session_state.pagina_atual = preferencias["pagina_inicial"]
+
     st.session_state.sidebar_recolhido = preferencias["menu_recolhido"]
+
+
+def usuario_logado():
+    usuario = st.session_state.get("usuario")
+
+    if usuario:
+        return usuario
+
+    usuario = usuario_por_token(_token_do_cookie())
+
+    if usuario:
+        st.session_state.usuario = usuario
+        _aplicar_preferencias(usuario)
+
+    return usuario
+
+
+def aplicar_cookie_pendente():
+    pendente = st.session_state.pop("_cookie_pendente", None)
+
+    if not pendente:
+        return
+
+    acao, token = pendente
+    duracao = VALIDADE_COOKIE_SEGUNDOS if acao == "gravar" else 0
+    valor = token if acao == "gravar" else ""
+
+    components.html(
+        f"""
+        <script>
+            try {{
+                const seguro = window.parent.location.protocol === "https:"
+                    ? "; Secure" : "";
+                window.parent.document.cookie =
+                    "{NOME_COOKIE}={valor}; max-age={duracao}; path=/; SameSite=Lax"
+                    + seguro;
+            }} catch (erro) {{}}
+        </script>
+        """,
+        height=0,
+    )
+
+
+def _iniciar_sessao(usuario, manter_conectado=False):
+    st.session_state.usuario = usuario
+    _aplicar_preferencias(usuario)
+
+    if manter_conectado:
+        st.session_state["_cookie_pendente"] = (
+            "gravar",
+            criar_sessao_persistente(usuario["id"]),
+        )
 
     st.session_state.pop("login_falhas", None)
     st.session_state.pop("login_bloqueado_ate", None)
@@ -288,8 +346,9 @@ def _iniciar_sessao(usuario):
 
 
 def sair():
-    """Encerra a sessão e limpa o estado do dashboard."""
+    encerrar_sessao_persistente(_token_do_cookie())
     st.session_state.clear()
+    st.session_state["_cookie_pendente"] = ("remover", "")
     st.rerun()
 
 
@@ -325,7 +384,7 @@ def _render_login():
         </div>
     """, unsafe_allow_html=True)
 
-    # Mensagem deixada por outra tela (ex.: senha redefinida)
+
     aviso = st.session_state.pop("auth_aviso", None)
     if aviso:
         st.success(aviso)
@@ -337,6 +396,7 @@ def _render_login():
             type="password",
             placeholder="Digite sua senha"
         )
+        manter = st.checkbox("Manter conectado por 30 dias", value=True)
         entrar = st.form_submit_button("Entrar", use_container_width=True)
 
     if entrar:
@@ -353,7 +413,7 @@ def _render_login():
             usuario = autenticar(email, senha)
 
             if usuario:
-                _iniciar_sessao(usuario)
+                _iniciar_sessao(usuario, manter)
             else:
                 _registrar_falha()
                 st.error("E-mail ou senha incorretos.")
@@ -424,7 +484,6 @@ def _voltar_ao_login(aviso=None):
 
 
 def _solicitar_codigo(email):
-    """Gera o código e envia por e-mail (ou guarda para mostrar, no modo de teste)."""
     resultado = gerar_codigo_redefinicao(email)
 
     if resultado:
@@ -543,7 +602,6 @@ def render_auth():
 
 
 def render_auth_page():
-    """Tela completa de entrada: carrossel à esquerda e login/cadastro à direita."""
     st.markdown(PAGE_STYLE, unsafe_allow_html=True)
 
     with st.container(key="login_card"):
