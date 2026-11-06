@@ -248,24 +248,127 @@ PAGE_STYLE = """
 
 
 def formatar_moeda(valor):
-
     if pd.isna(valor):
-
         return "N/D"
 
     valor = float(valor)
+    absoluto = abs(valor)
+    sinal = "−" if valor < 0 else ""
+
+    if absoluto >= 1_000_000_000:
+        numero, unidade = absoluto / 1_000_000_000, " bi"
+    elif absoluto >= 1_000_000:
+        numero, unidade = absoluto / 1_000_000, " mi"
+    elif absoluto >= 1_000:
+        numero, unidade = absoluto / 1_000, " mil"
+    else:
+        numero, unidade = absoluto, ""
+
+    texto = (
+        f"{numero:,.2f}"
+        .replace(",", "X")
+        .replace(".", ",")
+        .replace("X", ".")
+    )
+
+    return f"{sinal}R$ {texto}{unidade}"
+
+
+def formatar_dias(valor):
+    if pd.isna(valor):
+        return "N/D"
 
     return (
-
-        f"R$ {valor:,.2f}"
-
+        f"{float(valor):,.1f}"
         .replace(",", "X")
-
         .replace(".", ",")
-
         .replace("X", ".")
-
+        + " dias"
     )
+
+
+def _escala_moeda(valores):
+    maximo = pd.Series(valores).abs().max()
+
+    if pd.isna(maximo):
+        return 1, "R$"
+
+    if maximo >= 1_000_000_000:
+        return 1_000_000_000, "R$ bi"
+
+    if maximo >= 1_000_000:
+        return 1_000_000, "R$ mi"
+
+    if maximo >= 1_000:
+        return 1_000, "R$ mil"
+
+    return 1, "R$"
+
+
+def _grafico_evolucao(historico, colunas, cores, tipo, chave, titulo, nota):
+    with st.container(key=chave):
+        _titulo_cartao(titulo, nota)
+
+        existentes = [c for c in colunas if c in historico.columns]
+
+        if not existentes:
+            st.info("A base não contém os indicadores necessários para este gráfico.")
+            return
+
+        serie = (
+            historico.groupby("Ano_Numero")[existentes]
+            .mean()
+            .sort_index()
+            .dropna(how="all")
+        )
+
+        if serie.empty:
+            st.info("Não há dados suficientes para montar a evolução.")
+            return
+
+        if tipo == "moeda":
+            divisor, unidade = _escala_moeda(serie.values.ravel())
+            serie = serie / divisor
+            rotulo, sufixo = unidade, f" {unidade}"
+        elif tipo == "percentual":
+            serie = serie * 100
+            rotulo, sufixo = "%", "%"
+        elif tipo == "dias":
+            rotulo, sufixo = "dias", " dias"
+        else:
+            rotulo, sufixo = "vezes", "x"
+
+        fig = px.line(
+            serie.reset_index(),
+            x="Ano_Numero",
+            y=existentes,
+            color_discrete_sequence=cores[:len(existentes)],
+            markers=True,
+            template="plotly_white",
+            labels={"Ano_Numero": "Ano", "value": rotulo, "variable": "Indicador"},
+        )
+
+        fig.update_layout(
+            separators=",.",
+            height=320,
+            margin=dict(l=8, r=8, t=18, b=8),
+            hovermode="x unified",
+            paper_bgcolor="rgba(0,0,0,0)",
+            plot_bgcolor="rgba(0,0,0,0)",
+            font=dict(family="Arial", color="#52647A", size=11),
+            xaxis=dict(showgrid=False, dtick=1),
+            yaxis=dict(title=rotulo, gridcolor="#EAF0F6", tickformat=",.1f"),
+            legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="left", x=0),
+        )
+
+        fig.update_traces(
+            line=dict(width=3),
+            marker=dict(size=6),
+            hovertemplate="Ano %{x}<br>%{fullData.name}: %{y:,.2f}" + sufixo + "<extra></extra>",
+        )
+
+        st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False, "responsive": True})
+
 
 def formatar_percentual(valor):
 
@@ -689,7 +792,7 @@ def _render_conteudo():
         _kpi(
             "vg_kpi_ciclo",
             "Ciclo Financeiro",
-            formatar_numero(obter_valor("Ciclo Financeiro")),
+            formatar_dias(obter_valor("Ciclo Financeiro")),
             obter_variacao_anual("Ciclo Financeiro", "", "numero"),
             "Ciclo financeiro: prazo médio de recebimento menos prazo médio de pagamento, em dias.",
         )
@@ -762,21 +865,23 @@ def _render_conteudo():
         if "EBITDA" in historico_base.columns:
             serie_ebitda = historico_base.groupby("Ano_Numero")["EBITDA"].mean().dropna().sort_index()
             if not serie_ebitda.empty:
+                divisor_ebitda, unidade_ebitda = _escala_moeda(serie_ebitda.values)
+                serie_ebitda = serie_ebitda / divisor_ebitda
                 fig_ebitda_anos = px.line(
                     x=serie_ebitda.index.astype(int), y=serie_ebitda.values,
                     markers=True, template="plotly_white",
-                    labels={"x": "Ano", "y": "EBITDA (R$)"},
+                    labels={"x": "Ano", "y": f"EBITDA ({unidade_ebitda})"},
                 )
                 fig_ebitda_anos.update_traces(
                     line=dict(color="#1677E8", width=3), marker=dict(size=7),
-                    hovertemplate="Ano %{x}<br>EBITDA: R$ %{y:,.2f}<extra></extra>",
+                    hovertemplate="Ano %{x}<br>EBITDA: %{y:,.2f} " + unidade_ebitda + "<extra></extra>",
                 )
                 fig_ebitda_anos.update_layout(
-                    height=320, margin=dict(l=8, r=8, t=18, b=8),
+                    separators=",.", height=320, margin=dict(l=8, r=8, t=18, b=8),
                     paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
                     font=dict(family="Arial", color="#52647A", size=11),
                     xaxis=dict(title="Ano", showgrid=False, dtick=1),
-                    yaxis=dict(title="EBITDA (R$)", gridcolor="#EAF0F6", tickformat=",.2s"),
+                    yaxis=dict(title=f"EBITDA ({unidade_ebitda})", gridcolor="#EAF0F6", tickformat=",.1f"),
                 )
                 st.plotly_chart(fig_ebitda_anos, use_container_width=True, config={"displayModeBar": False, "responsive": True})
             else:
@@ -799,7 +904,7 @@ def _render_conteudo():
                     hovertemplate="Ano %{x}<br>Margem EBITDA: %{y:.2f}%<extra></extra>",
                 )
                 fig_margem_anos.update_layout(
-                    height=320, margin=dict(l=8, r=8, t=18, b=8),
+                    separators=",.", height=320, margin=dict(l=8, r=8, t=18, b=8),
                     paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
                     font=dict(family="Arial", color="#52647A", size=11),
                     xaxis=dict(title="Ano", showgrid=False, dtick=1),
@@ -815,13 +920,14 @@ def _render_conteudo():
     _titulo_secao("Retorno e custo de capital ao longo do tempo")
     col_retorno, col_valor = st.columns(2, gap="medium")
     with col_retorno, st.container(key="vg_grafico_retorno"):
-        _titulo_cartao("ROIC e WACC", "Indicadores percentuais para comparar retorno do capital e custo de financiamento.")
+        _titulo_cartao("ROIC, ROE e WACC", "Retorno do capital, retorno do acionista e custo de financiamento, em %.")
         if all(c in historico_base.columns for c in ["ROIC", "WACC"]):
-            retorno = historico_base.groupby("Ano_Numero")[["ROIC", "WACC"]].mean().sort_index() * 100
-            retorno = retorno.rename(columns={"ROIC": "ROIC (%)", "WACC": "WACC (%)"}).dropna(how="all")
+            colunas_retorno = [c for c in ["ROIC", "ROE", "WACC"] if c in historico_base.columns]
+            retorno = historico_base.groupby("Ano_Numero")[colunas_retorno].mean().sort_index() * 100
+            retorno = retorno.rename(columns={c: f"{c} (%)" for c in colunas_retorno}).dropna(how="all")
             if not retorno.empty:
-                fig_retorno = px.line(retorno.reset_index(), x="Ano_Numero", y=["ROIC (%)", "WACC (%)"], color_discrete_sequence=["#1677E8", "#E7A23B"], markers=True, template="plotly_white", labels={"Ano_Numero":"Ano", "value":"Percentual", "variable":"Indicador"})
-                fig_retorno.update_layout(height=320, margin=dict(l=8,r=8,t=18,b=8), hovermode="x unified", paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", font=dict(family="Arial",color="#52647A",size=11), xaxis=dict(showgrid=False,dtick=1), yaxis=dict(gridcolor="#EAF0F6",ticksuffix="%"), legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="left", x=0))
+                fig_retorno = px.line(retorno.reset_index(), x="Ano_Numero", y=list(retorno.columns), color_discrete_map={"ROIC (%)": "#1677E8", "ROE (%)": "#6D6AE8", "WACC (%)": "#E7A23B"}, markers=True, template="plotly_white", labels={"Ano_Numero":"Ano", "value":"Percentual", "variable":"Indicador"})
+                fig_retorno.update_layout(separators=",.", height=320, margin=dict(l=8,r=8,t=18,b=8), hovermode="x unified", paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", font=dict(family="Arial",color="#52647A",size=11), xaxis=dict(showgrid=False,dtick=1), yaxis=dict(gridcolor="#EAF0F6",ticksuffix="%"), legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="left", x=0))
                 fig_retorno.update_traces(line=dict(width=3), marker=dict(size=6), hovertemplate="Ano %{x}<br>%{fullData.name}: %{y:.2f}%<extra></extra>")
                 st.plotly_chart(fig_retorno, use_container_width=True, config={"displayModeBar": False, "responsive": True})
             else:
@@ -834,15 +940,51 @@ def _render_conteudo():
             valores = historico_base.groupby("Ano_Numero")[["EVA", "NOPAT"]].mean().sort_index()
             valores = valores.rename(columns={"EVA": "EVA", "NOPAT": "NOPAT"}).dropna(how="all")
             if not valores.empty:
-                fig_valores = px.line(valores.reset_index(), x="Ano_Numero", y=["EVA", "NOPAT"], color_discrete_sequence=["#58B99A", "#6D6AE8"], markers=True, template="plotly_white", labels={"Ano_Numero":"Ano", "value":"Valor (R$)", "variable":"Indicador"})
-                fig_valores.update_layout(height=320, margin=dict(l=8,r=8,t=18,b=8), hovermode="x unified", paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", font=dict(family="Arial",color="#52647A",size=11), xaxis=dict(showgrid=False,dtick=1), yaxis=dict(gridcolor="#EAF0F6",tickformat=",.2s"), legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="left", x=0))
-                fig_valores.update_traces(line=dict(width=3), marker=dict(size=6), hovertemplate="Ano %{x}<br>%{fullData.name}: R$ %{y:,.2f}<extra></extra>")
+                divisor_valores, unidade_valores = _escala_moeda(valores.values.ravel())
+                valores = valores / divisor_valores
+                fig_valores = px.line(valores.reset_index(), x="Ano_Numero", y=["EVA", "NOPAT"], color_discrete_sequence=["#58B99A", "#6D6AE8"], markers=True, template="plotly_white", labels={"Ano_Numero":"Ano", "value":unidade_valores, "variable":"Indicador"})
+                fig_valores.update_layout(separators=",.", height=320, margin=dict(l=8,r=8,t=18,b=8), hovermode="x unified", paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", font=dict(family="Arial",color="#52647A",size=11), xaxis=dict(showgrid=False,dtick=1), yaxis=dict(title=unidade_valores,gridcolor="#EAF0F6",tickformat=",.1f"), legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="left", x=0))
+                fig_valores.update_traces(line=dict(width=3), marker=dict(size=6), hovertemplate="Ano %{x}<br>%{fullData.name}: %{y:,.2f} " + unidade_valores + "<extra></extra>")
                 st.plotly_chart(fig_valores, use_container_width=True, config={"displayModeBar": False, "responsive": True})
             else:
                 st.info("Não há dados suficientes de EVA e NOPAT para montar a evolução.")
         else:
             st.info("A base não contém as colunas EVA e NOPAT necessárias para este gráfico.")
 
+
+    _titulo_secao("Caixa e capital de giro ao longo do tempo")
+
+    col_caixa, col_giro = st.columns(2, gap="medium")
+
+    with col_caixa:
+        _grafico_evolucao(
+            historico_base, ["FCO", "FCL"], ["#1677E8", "#58B99A"], "moeda",
+            "vg_grafico_caixa", "FCO e FCL",
+            "Caixa gerado pela operação e caixa livre depois dos investimentos.",
+        )
+
+    with col_giro:
+        _grafico_evolucao(
+            historico_base, ["PMR", "PMP", "Ciclo Financeiro"], ["#1677E8", "#E7A23B", "#C65B5B"], "dias",
+            "vg_grafico_giro", "Prazos e ciclo financeiro",
+            "Dias para receber (PMR), dias para pagar (PMP) e ciclo financeiro.",
+        )
+
+    col_conversao, col_cobertura = st.columns(2, gap="medium")
+
+    with col_conversao:
+        _grafico_evolucao(
+            historico_base, ["FCO / EBITDA", "Taxa de Conversão da Receita em Caixa"], ["#58B99A", "#6D6AE8"], "percentual",
+            "vg_grafico_conversao", "Conversão em caixa",
+            "Quanto do EBITDA e da receita vira caixa, em %.",
+        )
+
+    with col_cobertura:
+        _grafico_evolucao(
+            historico_base, ["Cobertura de Juros", "Cobertura de Dividendos"], ["#1677E8", "#E7A23B"], "vezes",
+            "vg_grafico_cobertura", "Coberturas",
+            "Quantas vezes o caixa cobre os juros e a distribuição aos acionistas.",
+        )
 
     with st.container(key="vg_qualidade"):
 
@@ -940,6 +1082,10 @@ def _render_conteudo():
             "acionista; FCO e FCL mostram o caixa gerado antes e depois dos "
             "investimentos; o ciclo financeiro mostra quantos dias o caixa fica "
             "preso entre pagar e receber.",
+            "**Valores abreviados:** mil, mi e bi significam milhares, milhões e "
+            "bilhões de reais. Nos gráficos, a unidade aparece no eixo.",
+            "**Gráficos de evolução:** mostram a média dos cenários por ano ou o "
+            "cenário escolhido. Linhas que começam no Ano 2 usam o ano anterior.",
             "**N/D:** indicadores que usam o ano anterior não existem no Ano 1.",
         ],
         "os valores vêm da planilha de indicadores e não são recalculados nesta "
