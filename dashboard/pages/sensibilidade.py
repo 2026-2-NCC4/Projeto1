@@ -1,9 +1,9 @@
-
 import altair as alt
 import numpy as np
 import pandas as pd
 import streamlit as st
 
+from components.como_interpretar import como_interpretar
 from data.load_data import carregar_demonstrativo
 from pages.regressao import (
     FATORES,
@@ -136,13 +136,6 @@ def _formatar_moeda(valor):
 
 
 def _calcular_sensibilidade(df, ano):
-    """
-    Estima o impacto associado a uma variação de 10%
-    nos fatores financeiros sobre a geração de caixa.
-
-    A regressão utiliza todos os cenários disponíveis
-    para o ano selecionado.
-    """
 
     coluna_resultado = VARIAVEIS[RESULTADO]
     nomes = list(FATORES.keys())
@@ -225,12 +218,6 @@ def _calcular_sensibilidade(df, ano):
     }, None
 
 def _simular_indicador(df, ano, cenario, fator, variacao):
-    """
-    Simula alterações em indicadores financeiros a partir
-    dos dados do cenário e ano selecionados.
-
-    A variação é aplicada proporcionalmente ao valor-base.
-    """
 
     dados = df.loc[
         (df["Ano"] == ano) &
@@ -242,13 +229,36 @@ def _simular_indicador(df, ano, cenario, fator, variacao):
 
     linha = dados.iloc[0]
 
-    def valor(conta):
+    def normalizar(nome):
+        return " ".join(str(nome).split())
+
+    colunas = {normalizar(coluna): coluna for coluna in df.columns}
+
+    def valor_em(registro, conta):
+        coluna = colunas.get(normalizar(conta))
+
+        if coluna is None:
+            return np.nan
+
         resultado = pd.to_numeric(
-            pd.Series([linha.get(conta, np.nan)]),
+            pd.Series([registro.get(coluna, np.nan)]),
             errors="coerce",
         ).iloc[0]
 
         return float(resultado) if pd.notna(resultado) else np.nan
+
+    def valor(conta):
+        return valor_em(linha, conta)
+
+    anterior = df.loc[
+        (df["Ano"] == ano - 1) &
+        (df["Cenario"] == cenario)
+    ]
+
+    clientes_anterior = (
+        abs(valor_em(anterior.iloc[0], "BAL - Contas a Receber - Clientes"))
+        if not anterior.empty else np.nan
+    )
 
     def dividir(a, b):
         if pd.isna(a) or pd.isna(b) or b == 0:
@@ -265,7 +275,7 @@ def _simular_indicador(df, ano, cenario, fator, variacao):
 
     ativo = abs(valor("BAL - Total do Ativo"))
     caixa = abs(valor("BAL - Disponível"))
-    patrimonio = abs(valor("BAL  - Patrimônio Líquido"))
+    patrimonio = abs(valor("BAL - Patrimônio Líquido"))
     divida_cp = abs(valor("BAL - Emprést"))
     divida_lp = abs(valor("BAL - Empréstimos"))
 
@@ -273,7 +283,15 @@ def _simular_indicador(df, ano, cenario, fator, variacao):
     fornecedores = abs(valor("BAL - Fornecedores"))
 
     capex = abs(valor("FLU - Investimentos"))
-    fco = valor("FLU - Geração de Caixa")
+
+    recebimentos = receita - (clientes - clientes_anterior)
+
+    fco = (
+        recebimentos
+        + valor("FLU - Tributos")
+        + valor("FLU - Custos")
+        + valor("FLU - Imposto de Renda e Contribuição Social")
+    )
 
     receita_liquida = receita + tributos
     capital_investido = patrimonio + divida_cp + divida_lp - caixa
@@ -299,7 +317,7 @@ def _simular_indicador(df, ano, cenario, fator, variacao):
 
     fcl = fco - capex if pd.notna(fco) else np.nan
 
-    # Cada fator possui um indicador de resultado específico.
+
     if fator == "WACC":
         wacc_novo = wacc_base * (1 + variacao)
         original = eva
@@ -344,7 +362,7 @@ def _simular_indicador(df, ano, cenario, fator, variacao):
         simulado = ncg_nova
         unidade = "R$"
 
-    elif fator == "Capex":
+    elif fator == "Investimentos":
         capex_novo = capex * (1 + variacao)
         original = fcl
         simulado = fco - capex_novo
@@ -391,7 +409,7 @@ def _renderizar_simulacao(df, ano, cenario):
         "Receita",
         "PMR",
         "PMP",
-        "Capex",
+        "Investimentos",
     ]
 
     fator = st.selectbox(
@@ -501,6 +519,7 @@ def _renderizar_simulacao(df, ano, cenario):
                 "Situação:N",
                 title=None,
                 sort=["Original", "Simulado"],
+                axis=alt.Axis(labelAngle=0),
             ),
             y=alt.Y(
                 "Valor (R$ mi):Q",
@@ -523,24 +542,22 @@ def _renderizar_simulacao(df, ano, cenario):
         use_container_width=True,
     )
 
-    st.markdown(
-        """
-        <div class="sens-note">
-            <strong>Como interpretar:</strong>
-            a simulação altera um fator por vez e mantém os demais
-            valores constantes. O resultado representa uma estimativa
-            matemática baseada nas fórmulas financeiras utilizadas.
-
-            <br><br>
-
-            <strong>Limitação:</strong>
-            os resultados não representam previsões nem comprovam
-            relações causais. As simulações de PMR e PMP utilizam
-            uma estimativa simplificada da necessidade de capital
-            de giro.
-        </div>
-        """,
-        unsafe_allow_html=True,
+    como_interpretar(
+        "sens_simulacao",
+        [
+            "**Valor original:** indicador calculado com os dados do cenário "
+            "e do ano escolhidos.",
+            "**Valor simulado:** o mesmo indicador depois de aplicar a "
+            "variação escolhida em um único fator, mantendo os demais iguais.",
+            "**Impacto estimado:** diferença entre o simulado e o original. "
+            "Verde indica aumento e vermelho indica redução.",
+            "**Indicador afetado por cada fator:** WACC e ROIC alteram o EVA; "
+            "Margem EBITDA e Receita alteram o EBITDA; PMR e PMP alteram a "
+            "necessidade de capital de giro; Investimentos alteram o fluxo de caixa livre.",
+        ],
+        "os resultados são estimativas matemáticas, não previsões, e não "
+        "provam causa e efeito. As simulações de PMR e PMP usam uma "
+        "estimativa simplificada da necessidade de capital de giro.",
     )
 
 
@@ -930,26 +947,23 @@ def render_sensibilidade():
         with col_tabela:
             _card_tabela(fatores)
 
-        st.markdown(
-            """
-            <div class="sens-note">
-                <strong>Como interpretar:</strong>
-                o modelo estima a variação da geração de caixa associada
-                a um choque de 10% em cada fator, mantendo os demais
-                fatores constantes. Valores positivos indicam aumento
-                estimado da geração de caixa; valores negativos indicam
-                redução estimada.
-
-                <br><br>
-
-                <strong>Limitação:</strong>
-                os dados representam cenários simulados. A regressão
-                identifica associações entre as variáveis e não comprova
-                causalidade. Os resultados dependem da qualidade e da
-                variação dos cenários disponíveis.
-            </div>
-            """,
-            unsafe_allow_html=True,
+        como_interpretar(
+            "sens_regressao",
+            [
+                "**Barras:** mostram quanto a geração de caixa muda, em R$ "
+                "milhões, se cada fator variar 10% e os demais ficarem iguais.",
+                "**Verde e vermelho:** verde indica aumento estimado do caixa; "
+                "vermelho indica redução estimada.",
+                "**Variação (%):** o mesmo impacto em relação à geração de caixa "
+                "média dos cenários do ano.",
+                "**Poder explicativo:** quanto das diferenças de caixa entre os "
+                "cenários os fatores conseguem explicar juntos.",
+                "**Custos e Investimentos:** são saídas de dinheiro; crescer "
+                "significa gastar mais.",
+            ],
+            "os dados são de cenários simulados. A regressão mostra "
+            "associações e não comprova causa e efeito. Os resultados dependem "
+            "da variação entre os cenários disponíveis.",
         )
 
         st.caption(
