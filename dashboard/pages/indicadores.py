@@ -1,5 +1,6 @@
 import streamlit as st
 import pandas as pd
+from components.como_interpretar import como_interpretar, dicionario_indicadores
 from data.load_data import carregar_indicadores
 
 PAGE_STYLE = """
@@ -66,7 +67,6 @@ PAGE_STYLE = """
     margin-top: 7px;
 }
 
-/* Estética dos insights */
 .ind-insight {
     background: linear-gradient(135deg, #FFFFFF 0%, #F7FAFE 100%);
     border: 1px solid #E3ECF5;
@@ -117,9 +117,6 @@ PAGE_STYLE = """
 </style>
 """
 
-# ============================================================
-# CONFIGURAÇÕES DOS INDICADORES
-# ============================================================
 
 INDICADORES = {
     "EBITDA": {
@@ -280,15 +277,15 @@ INDICADORES = {
         "formato": "moeda",
         "descricao": "Fluxo de caixa livre após os investimentos."
     },
-    "Capex / Receita": {
+    "Investimentos / Receita": {
         "grupo": "Fluxo de caixa",
         "formato": "percentual",
         "descricao": "Representa os investimentos em relação à receita."
     },
-    "Capex / D&A": {
+    "Investimentos / Depreciação": {
         "grupo": "Fluxo de caixa",
         "formato": "multiplo",
-        "descricao": "Relaciona os investimentos à depreciação e amortização."
+        "descricao": "Relaciona os investimentos à depreciação e amortização do período."
     },
     "Cobertura de Juros": {
         "grupo": "Fluxo de caixa",
@@ -300,7 +297,7 @@ INDICADORES = {
         "formato": "percentual",
         "descricao": "Relaciona o fluxo de caixa operacional à dívida bruta."
     },
-    "Payout em Caixa": {
+    "Distribuição / Lucro Líquido": {
         "grupo": "Fluxo de caixa",
         "formato": "percentual",
         "descricao": "Relaciona a distribuição de caixa aos acionistas ao lucro líquido."
@@ -312,9 +309,6 @@ INDICADORES = {
     }
 }
 
-# ============================================================
-# FUNÇÕES AUXILIARES
-# ============================================================
 
 def _numero(valor, casas=2):
     if pd.isna(valor):
@@ -350,16 +344,7 @@ def _percentual(valor, serie=None):
     if pd.isna(valor):
         return "—"
 
-    if serie is not None:
-        valores = pd.to_numeric(serie, errors="coerce").dropna()
-
-        if not valores.empty and valores.abs().median() <= 1.5:
-            valor = valor * 100
-
-    elif abs(valor) <= 1.5:
-        valor = valor * 100
-
-    return f"{_numero(valor)}%"
+    return f"{_numero(valor * 100)}%"
 
 
 def _formatar_indicador(coluna, valor, serie=None):
@@ -373,6 +358,12 @@ def _formatar_indicador(coluna, valor, serie=None):
 
     if formato == "percentual":
         return _percentual(valor, serie)
+
+    if formato == "dias":
+        return f"{_numero(valor, 1)} dias"
+
+    if formato == "multiplo":
+        return f"{_numero(valor)}x"
 
     return _numero(valor)
 
@@ -424,10 +415,6 @@ def _numero_ano(valor):
     return int(resultado) if pd.notna(resultado) else 0
 
 
-# ============================================================
-# ORGANIZAÇÃO DOS CENÁRIOS
-# ============================================================
-
 def _mapear_cenarios(df):
     cenarios_originais = sorted(
         df["Cenario"].dropna().unique(),
@@ -444,10 +431,6 @@ def _mapear_cenarios(df):
 
     return mapa
 
-
-# ============================================================
-# ANÁLISE DO ANO SELECIONADO
-# ============================================================
 
 def _gerar_insights(
     df_ano,
@@ -493,7 +476,7 @@ def _gerar_insights(
         if "LC" in df_ano.columns else None
     )
 
-    # Resultados principais
+
     col1, col2 = st.columns(2)
 
     with col1:
@@ -542,7 +525,7 @@ def _gerar_insights(
                 f"A liquidez corrente média foi de {_numero(lc)}; {interpretacao}"
             )
 
-    # ROIC x WACC
+
     if "ROIC" in df_ano.columns and "WACC" in df_ano.columns:
         comparacao = df_ano[["ROIC", "WACC"]].apply(
             pd.to_numeric,
@@ -576,7 +559,7 @@ def _gerar_insights(
                 "disponíveis, o ROIC ficou acima do WACC."
             )
 
-    # Comparação com o ano anterior
+
     if df_anterior is not None and not df_anterior.empty:
 
         if "EBITDA" in df_ano.columns and "EBITDA" in df_anterior.columns:
@@ -631,7 +614,7 @@ def _gerar_insights(
                     "ponto(s) na escala original dos dados."
                 )
 
-    # Melhor cenário por EBITDA
+
     if (
         cenario_selecionado == "Todos"
         and "Cenario" in df_ano.columns
@@ -658,9 +641,167 @@ def _gerar_insights(
             )
 
 
-# ============================================================
-# TABELA PERSONALIZADA
-# ============================================================
+def _valor_central(df, coluna):
+    if coluna not in df.columns:
+        return None
+
+    valores = pd.to_numeric(df[coluna], errors="coerce").dropna()
+
+    return float(valores.median()) if not valores.empty else None
+
+
+def _gerar_insights_novos(df_ano, cenario_selecionado):
+    if cenario_selecionado == "Todos":
+        referencia = "mediana dos cenários"
+    else:
+        referencia = "valor do cenário"
+
+    roe = _valor_central(df_ano, "ROE")
+    roic = _valor_central(df_ano, "ROIC")
+    margem = _valor_central(df_ano, "DuPont - Margem Líquida")
+    giro = _valor_central(df_ano, "DuPont - Giro do Ativo")
+    alavancagem = _valor_central(df_ano, "DuPont - Alavancagem")
+    pmr = _valor_central(df_ano, "PMR")
+    pmp = _valor_central(df_ano, "PMP")
+    ciclo = _valor_central(df_ano, "Ciclo Financeiro")
+    ccl = _valor_central(df_ano, "CCL")
+    fco = _valor_central(df_ano, "FCO")
+    fco_ebitda = _valor_central(df_ano, "FCO / EBITDA")
+    fcl = _valor_central(df_ano, "FCL")
+    cobertura_juros = _valor_central(df_ano, "Cobertura de Juros")
+    cobertura_dividendos = _valor_central(df_ano, "Cobertura de Dividendos")
+
+    esquerda = []
+    direita = []
+
+    if roe is not None:
+        texto = f"O ROE ({referencia}) foi de {_percentual(roe)}."
+
+        if roic is not None:
+            if roe > roic:
+                texto += (
+                    f" Ficou acima do ROIC ({_percentual(roic)}): o retorno "
+                    "ao acionista superou o retorno do capital investido."
+                )
+            else:
+                texto += (
+                    f" Ficou abaixo do ROIC ({_percentual(roic)}): o retorno "
+                    "ao acionista não superou o do capital investido."
+                )
+
+        esquerda.append(("Retorno sobre o patrimônio líquido", texto))
+
+    if None not in (margem, giro, alavancagem):
+        esquerda.append((
+            "Decomposição do ROE (DuPont)",
+            f"O retorno é formado por margem líquida de {_percentual(margem)}, "
+            f"giro do ativo de {_numero(giro)}x e alavancagem de "
+            f"{_numero(alavancagem)}x. A margem mostra a eficiência, o giro "
+            "mostra o uso dos ativos e a alavancagem mostra o peso do capital "
+            "de terceiros."
+        ))
+
+    if fco_ebitda is not None:
+        texto = (
+            f"O fluxo de caixa operacional equivale a "
+            f"{_percentual(fco_ebitda)} do EBITDA"
+        )
+
+        if fco is not None:
+            texto += f" (FCO de {_moeda(fco)})"
+
+        if fco_ebitda >= 1:
+            texto += ". Todo o resultado operacional virou caixa no período."
+        else:
+            texto += ". Parte do resultado operacional não virou caixa no período."
+
+        esquerda.append(("Conversão do EBITDA em caixa", texto))
+
+    if cobertura_juros is not None:
+        if cobertura_juros >= 1:
+            leitura = "O caixa operacional cobre as despesas financeiras."
+        else:
+            leitura = "O caixa operacional não cobre as despesas financeiras."
+
+        esquerda.append((
+            "Cobertura de juros",
+            f"O FCO cobre {_numero(cobertura_juros)}x as despesas "
+            f"financeiras. {leitura}"
+        ))
+
+    if ciclo is not None:
+        texto = f"O ciclo financeiro foi de {_numero(ciclo, 1)} dias"
+
+        if pmr is not None and pmp is not None:
+            texto += (
+                f" (recebimento em {_numero(pmr, 1)} dias e pagamento em "
+                f"{_numero(pmp, 1)} dias)"
+            )
+
+        if ciclo > 0:
+            texto += (
+                ". A empresa espera mais para receber do que leva para pagar "
+                "e precisa financiar essa diferença."
+            )
+        else:
+            texto += (
+                ". A empresa paga depois de receber: os fornecedores ajudam a "
+                "financiar a operação."
+            )
+
+        direita.append(("Capital de giro e prazos", texto))
+
+    if ccl is not None:
+        if ccl >= 0:
+            leitura = "Os ativos circulantes superam os passivos circulantes."
+        else:
+            leitura = "Os passivos circulantes superam os ativos circulantes."
+
+        direita.append((
+            "Capital circulante líquido",
+            f"O CCL foi de {_moeda(ccl)}. {leitura}"
+        ))
+
+    if fcl is not None:
+        if fcl >= 0:
+            leitura = "Depois dos investimentos, sobrou caixa."
+        else:
+            leitura = "Os investimentos superaram o caixa operacional."
+
+        direita.append((
+            "Fluxo de caixa livre",
+            f"O FCL foi de {_moeda(fcl)}. {leitura}"
+        ))
+
+    if cobertura_dividendos is not None:
+        if cobertura_dividendos >= 1:
+            leitura = "O caixa livre cobre a distribuição aos acionistas."
+        else:
+            leitura = "O caixa livre não cobre a distribuição aos acionistas."
+
+        direita.append((
+            "Cobertura de dividendos",
+            f"O FCL cobre {_numero(cobertura_dividendos)}x a distribuição "
+            f"de caixa. {leitura}"
+        ))
+
+    if not esquerda and not direita:
+        st.info(
+            "Os novos indicadores não têm valores para este recorte. "
+            "Os que usam variação ou média de dois anos começam no Ano 2."
+        )
+        return
+
+    col1, col2 = st.columns(2)
+
+    with col1:
+        for titulo, texto in esquerda:
+            _insight(titulo, texto)
+
+    with col2:
+        for titulo, texto in direita:
+            _insight(titulo, texto)
+
 
 def _tabela_indicadores(df, mapa_cenarios):
     _titulo_secao(
@@ -720,9 +861,7 @@ def _tabela_indicadores(df, mapa_cenarios):
 
     tabela = tabela.sort_values(["Cenário", "Ano"])
 
-    nomes = {
-        "Margem EBITDA": "Margem EBITDA (%)",
-        "Margem Líquida": "Margem Líquida (%)",
+    rotulos = {
         "PCT": "Participação de Capital de Terceiros",
         "CE": "Composição do Endividamento",
         "IPL": "Imobilização do Patrimônio Líquido",
@@ -730,12 +869,24 @@ def _tabela_indicadores(df, mapa_cenarios):
         "LS": "Liquidez Seca",
         "LI": "Liquidez Imediata",
         "LG": "Liquidez Geral",
-        "Capital Investido": "Capital Investido (R$)",
-        "EBITDA": "EBITDA (R$)",
-        "NOPAT": "NOPAT (R$)",
-        "EVA": "EVA (R$)",
-        "MVA Aproximado": "MVA Aproximado (R$)"
     }
+
+    nomes = {}
+
+    for indicador in selecionados:
+        base = rotulos.get(indicador, indicador)
+        formato = INDICADORES[indicador]["formato"]
+
+        if formato == "moeda":
+            nomes[indicador] = f"{base} (R$ mi)"
+            tabela[indicador] = tabela[indicador] / 1_000_000
+        elif formato == "percentual":
+            nomes[indicador] = f"{base} (%)"
+            tabela[indicador] = tabela[indicador] * 100
+        elif formato == "dias":
+            nomes[indicador] = f"{base} (dias)"
+        else:
+            nomes[indicador] = base
 
     tabela = tabela.rename(columns=nomes)
 
@@ -751,17 +902,13 @@ def _tabela_indicadores(df, mapa_cenarios):
     }
 
     for indicador in selecionados:
-        nome = nomes.get(indicador, indicador)
+        nome = nomes[indicador]
         formato = INDICADORES[indicador]["formato"]
 
-        if formato == "moeda":
-            formato_numero = "R$ %.2f"
-        elif formato == "percentual":
-            formato_numero = "%.2%%"
-        elif formato == "dias":
-            formato_numero = "%.1f dias"
-        elif formato == "multiplo":
+        if formato == "multiplo":
             formato_numero = "%.2fx"
+        elif formato == "dias":
+            formato_numero = "%.1f"
         else:
             formato_numero = "%.2f"
 
@@ -798,16 +945,12 @@ def _tabela_indicadores(df, mapa_cenarios):
     )
 
 
-# ============================================================
-# PÁGINA PRINCIPAL
-# ============================================================
-
 def render_indicadores():
     st.markdown(PAGE_STYLE, unsafe_allow_html=True)
 
     with st.container(key="ind_page"):
 
-        # Carregamento
+
         try:
             df = carregar_indicadores()
 
@@ -829,7 +972,7 @@ def render_indicadores():
                 .astype(int)
             )
 
-        # Converte colunas numéricas
+
         for coluna in INDICADORES:
             if coluna in df.columns:
                 df[coluna] = pd.to_numeric(
@@ -837,7 +980,7 @@ def render_indicadores():
                     errors="coerce"
                 )
 
-        # Cenários e anos
+
         mapa_cenarios = _mapear_cenarios(df)
 
         anos_disponiveis = (
@@ -849,7 +992,7 @@ def render_indicadores():
 
         cenarios_originais = list(mapa_cenarios.keys())
 
-        # Cabeçalho e filtros
+
         col_titulo, col_ano, col_cenario = st.columns(
             [2.6, 1, 1.2],
             vertical_alignment="bottom"
@@ -891,7 +1034,7 @@ def render_indicadores():
 
         st.write("")
 
-        # Filtro do ano
+
         df_ano = df[
             df["Ano"] == ano_selecionado
         ].copy()
@@ -905,7 +1048,7 @@ def render_indicadores():
             st.warning("Não existem dados para essa seleção.")
             return
 
-        # Ano anterior para comparação
+
         ano_numero = _numero_ano(ano_selecionado)
 
         df_anterior = df[
@@ -917,7 +1060,7 @@ def render_indicadores():
                 df_anterior["Cenario"] == cenario_selecionado
             ]
 
-        # Resumo do ano
+
         _titulo_secao(
             f"Resumo de {ano_selecionado}",
             "Indicadores médios do recorte selecionado."
@@ -969,11 +1112,46 @@ def render_indicadores():
             "Retorno sobre o capital investido"
         )
 
+        roe = media("ROE")
+        fcl = media("FCL")
+        conversao = media("FCO / EBITDA")
+        ciclo = media("Ciclo Financeiro")
+
+        col5, col6, col7, col8 = st.columns(4)
+
+        _card(
+            col5,
+            "ROE médio",
+            _percentual(roe) if roe is not None else "—",
+            "Retorno sobre o patrimônio líquido"
+        )
+
+        _card(
+            col6,
+            "FCL médio",
+            _moeda(fcl) if fcl is not None else "—",
+            "Caixa livre após investimentos"
+        )
+
+        _card(
+            col7,
+            "Conversão de caixa",
+            _percentual(conversao) if conversao is not None else "—",
+            "FCO em relação ao EBITDA"
+        )
+
+        _card(
+            col8,
+            "Ciclo financeiro",
+            f"{_numero(ciclo, 1)} dias" if ciclo is not None else "—",
+            "Prazo de recebimento menos prazo de pagamento"
+        )
+
         st.write("")
 
-        # Insights automáticos
+
         _titulo_secao(
-            "Insights do período",
+            "Indicadores de Desempenho",
             "Leituras automáticas dos indicadores do ano selecionado."
         )
 
@@ -985,8 +1163,47 @@ def render_indicadores():
 
         st.write("")
 
-        # Explorador de indicadores
+        _titulo_secao(
+            "Indicadores de Estrutura e Retorno",
+            "Leituras de retorno, capital de giro e caixa do ano selecionado."
+        )
+
+        _gerar_insights_novos(
+            df_ano,
+            cenario_selecionado
+        )
+
+        st.write("")
+
+
         _tabela_indicadores(
             df_ano,
             mapa_cenarios
+        )
+
+        st.write("")
+
+        dicionario_indicadores("ind")
+
+        como_interpretar(
+            "ind",
+            [
+                "**Resumo do ano:** média dos valores do recorte escolhido. Em "
+                "\"Todos\", é a média dos cenários; em um cenário, é o valor dele.",
+                "**Insights:** leituras automáticas. As dos novos indicadores usam "
+                "a mediana, para que cenários extremos não distorçam o resultado.",
+                "**ROE e DuPont:** o ROE é o lucro líquido sobre o patrimônio "
+                "líquido médio. A decomposição mostra se o retorno vem da margem, "
+                "do giro dos ativos ou da alavancagem.",
+                "**Capital de giro:** o ciclo financeiro é o prazo de recebimento "
+                "menos o prazo de pagamento. Quanto maior, mais caixa fica preso "
+                "na operação.",
+                "**Caixa:** o FCO estima o caixa gerado pela operação e o FCL "
+                "desconta os investimentos. Coberturas abaixo de 1x indicam que "
+                "o caixa não cobre a obrigação.",
+                "**N/D ou vazio:** indicadores que usam o ano anterior (ROE, "
+                "FCO, FCL e coberturas) não existem no Ano 1.",
+            ],
+            "os indicadores de caixa são estimados a partir do balanço e da DRE, "
+            "não de um fluxo de caixa contábil completo.",
         )
