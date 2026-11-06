@@ -661,3 +661,7 @@ body:has(.cti-collapsed-marker) [data-testid="stSidebar"] .st-key-cti_nav_simula
 [data-testid="stSidebarCollapsedControl"] {
     display: none !important;
 }
+
+[data-testid="stHeaderActionElements"] {
+    display: none !important;
+}
