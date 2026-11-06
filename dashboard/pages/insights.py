@@ -1,6 +1,7 @@
 import numpy as np
 import streamlit as st
 
+from components.como_interpretar import como_interpretar
 from data.load_data import carregar_demonstrativo
 from pages.regressao import _moeda_mi, _num, ajustar_ols, remover_colineares
 
@@ -9,7 +10,7 @@ EBITDA = "DRE - EBITDA"
 CAIXA = "FLU - Geração de Caixa"
 RESULTADO = "DRE - Resultado Líquido"
 
-# Variáveis testadas no card de sensibilidade (impacto no Resultado Líquido)
+
 DRIVERS = {
     "Receita": "DRE - Receita",
     "Custos": "DRE - Custos",
@@ -65,8 +66,7 @@ PAGE_STYLE = """
         background: var(--cti-dark) !important;
     }
 
-    /* cartões da mesma linha com a mesma altura */
-    .st-key-ins_page [data-testid="stHorizontalBlock"]:has(.ins-card) {
+        .st-key-ins_page [data-testid="stHorizontalBlock"]:has(.ins-card) {
         align-items: stretch;
     }
 
@@ -171,8 +171,6 @@ PAGE_STYLE = """
 """
 
 
-# ---------- Cálculos ----------
-
 def _pct(valor, sinal=False):
     texto = _num(valor * 100, 1) + "%"
     return ("+" + texto) if sinal and valor > 0 else texto
@@ -192,7 +190,7 @@ def _crescimento_receita(df, ano):
     if ano not in crescimento.index:
         return None, None
 
-    # posição do ano entre todos os crescimentos anuais da série (1 = maior)
+
     posicao = int((crescimento > crescimento[ano]).sum()) + 1
     return crescimento[ano], posicao
 
@@ -209,11 +207,6 @@ def _melhor_margem(dados_ano):
 
 
 def _maior_sensibilidade(dados_ano):
-    """Driver cuja variação de 10% mais mexe no Resultado Líquido.
-
-    Usa a mesma regressão da página de Regressão (entre os cenários do ano):
-    impacto = coeficiente x 10% do valor médio do driver.
-    """
     colunas = [RESULTADO] + list(DRIVERS.values())
     dados = dados_ano[colunas].dropna()
 
@@ -237,8 +230,6 @@ def _maior_sensibilidade(dados_ano):
     driver = max(impactos, key=impactos.get)
     return driver, impactos[driver]
 
-
-# ---------- Blocos da página ----------
 
 def _topo(anos, cenarios, cenario_padrao):
     with st.container(key="ins_topo"):
@@ -302,14 +293,12 @@ def _pitch(titulo, linhas):
     corpo = "".join(f"<p>{linha}</p>" for linha in linhas)
     st.markdown(f"""
         <div class="ins-pitch">
-            <div class="ins-pitch-eyebrow">CONCLUSÃO PARA O PITCH</div>
+            <div class="ins-pitch-eyebrow">CONCLUSÃO PARA A APRESENTAÇÃO</div>
             <div class="ins-pitch-title">{titulo}</div>
             {corpo}
         </div>
     """, unsafe_allow_html=True)
 
-
-# ---------- Página principal ----------
 
 def render_insights():
     st.markdown(PAGE_STYLE, unsafe_allow_html=True)
@@ -328,7 +317,7 @@ def render_insights():
             st.warning("Não há anos ou cenários disponíveis na base.")
             return
 
-        # Na primeira visita, destaca o cenário com mais caixa no último ano
+
         ultimo_ano = df[df["Ano"] == anos[-1]]
         cenario_padrao = int(ultimo_ano.loc[ultimo_ano[CAIXA].idxmax(), "Cenario"])
 
@@ -342,7 +331,7 @@ def render_insights():
 
         col1, col2, col3, col4 = st.columns(4, gap="small")
 
-        # 01. Caixa do cenário escolhido
+
         with col1:
             if np.isnan(caixa):
                 _card(1, "N/D", "Caixa em destaque",
@@ -363,7 +352,7 @@ def render_insights():
                     else "Compare com os cenários de maior caixa",
                 )
 
-        # 02. Crescimento da receita média
+
         with col2:
             if crescimento is None:
                 _card(2, "N/D", "Receita",
@@ -386,7 +375,7 @@ def render_insights():
                     else "Investigue as causas da queda de receita",
                 )
 
-        # 03. Melhor margem EBITDA do ano
+
         with col3:
             if margem is None:
                 _card(3, "N/D", "Melhor margem",
@@ -402,7 +391,7 @@ def render_insights():
                     "Priorize o mix de maior contribuição",
                 )
 
-        # 04. Variável com maior impacto no Resultado Líquido
+
         with col4:
             if driver is None:
                 _card(4, "N/D", "Maior sensibilidade",
@@ -418,7 +407,7 @@ def render_insights():
                     f"Monitore {driver} de perto nas simulações",
                 )
 
-        # Conclusão: junta os sinais dos cards
+
         cresce = crescimento is not None and crescimento > 0
         caixa_acima = not np.isnan(caixa) and caixa >= caixa_media
 
@@ -455,3 +444,18 @@ def render_insights():
             )
 
         _pitch(titulo, linhas)
+
+        como_interpretar(
+            "ins",
+            [
+                "**01 Caixa em destaque:** compara a geração de caixa do cenário "
+                "escolhido com a média dos cenários do ano.",
+                "**02 Receita:** variação da receita média sobre o ano anterior.",
+                "**03 Melhor margem:** cenário com a maior margem EBITDA do ano.",
+                "**04 Maior sensibilidade:** variável que mais move o Resultado "
+                "Líquido se variar 10%.",
+                "**Conclusão:** junta os quatro sinais em um texto pronto para a "
+                "apresentação.",
+            ],
+            "são leituras descritivas dos cenários simulados, não previsões.",
+        )
