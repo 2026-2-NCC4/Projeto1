@@ -13,8 +13,6 @@ CAMINHO_PLANILHA = (
     / "Analise_Financeira.xlsx"
 )
 
-# Base larga (1.200 cenários x 12 anos) com as contas da DRE, do fluxo
-# de caixa e do balanço em colunas. É a mesma usada na análise de regressão.
 CAMINHO_DEMONSTRATIVO = (
     ROOT_DIR
     / "documentos"
@@ -22,6 +20,68 @@ CAMINHO_DEMONSTRATIVO = (
     / "análise inferencial de dados"
     / "Demonstrativo_Normalizado.csv"
 )
+
+ABA_DICIONARIO = "Dicionário de KPIs financeiros"
+
+NOMES_EM_PORTUGUES = {
+    "Capex / Receita": "Investimentos / Receita",
+    "Capex / D&A": "Investimentos / Depreciação",
+    "Payout em Caixa": "Distribuição / Lucro Líquido",
+}
+
+COLUNAS_NUMERICAS = [
+    "Margem EBITDA",
+    "Margem Líquida",
+    "LC",
+    "LS",
+    "LI",
+    "LG",
+    "PCT",
+    "CE",
+    "IPL",
+    "NOPAT",
+    "Capital Investido",
+    "ROIC",
+    "WACC",
+    "EVA",
+    "MVA Aproximado",
+    "EBITDA",
+    "ROE",
+    "DuPont - Margem Líquida",
+    "DuPont - Giro do Ativo",
+    "DuPont - Alavancagem",
+    "ROE DuPont",
+    "CCL",
+    "PMR",
+    "PMP",
+    "Ciclo Financeiro",
+    "Necessidade de Capital de Giro",
+    "Recebimentos Estimados",
+    "Taxa de Conversão da Receita em Caixa",
+    "FCO",
+    "FCO / EBITDA",
+    "FCO / Lucro Líquido",
+    "FCL",
+    "Investimentos / Receita",
+    "Investimentos / Depreciação",
+    "Cobertura de Juros",
+    "FCO / Dívida Bruta",
+    "Distribuição / Lucro Líquido",
+    "Cobertura de Dividendos",
+]
+
+COLUNAS_MONETARIAS_EM_MIL = [
+    "NOPAT",
+    "Capital Investido",
+    "EVA",
+    "MVA Aproximado",
+    "EBITDA",
+    "CCL",
+    "Necessidade de Capital de Giro",
+    "Recebimentos Estimados",
+    "FCO",
+    "FCL",
+]
 
 
 @st.cache_data
@@ -38,51 +98,17 @@ def carregar_indicadores():
         sheet_name="_Indicadores",
     )
 
-    colunas_numericas = [
-        "Margem EBITDA",
-        "Margem Líquida",
-        "LC",
-        "LS",
-        "LI",
-        "LG",
-        "PCT",
-        "CE",
-        "IPL",
-        "NOPAT",
-        "Capital Investido",
-        "ROIC",
-        "WACC",
-        "EVA",
-        "MVA Aproximado",
-        "EBITDA",
-        "ROE",
-        "DuPont - Margem Líquida",
-        "DuPont - Giro do Ativo",
-        "DuPont - Alavancagem",
-        "ROE DuPont",
-        "CCL",
-        "PMR",
-        "PMP",
-        "Ciclo Financeiro",
-        "Necessidade de Capital de Giro",
-        "Taxa de Conversão da Receita em Caixa",
-        "FCO",
-        "FCO / EBITDA",
-        "FCO / Lucro Líquido",
-        "FCL",
-        "Capex / Receita",
-        "Capex / D&A",
-        "Cobertura de Juros",
-        "FCO / Dívida Bruta",
-        "Payout em Caixa",
-        "Cobertura de Dividendos",
-    ]
+    df = df.rename(columns=NOMES_EM_PORTUGUES)
 
-    for coluna in colunas_numericas:
+    for coluna in COLUNAS_NUMERICAS:
         if coluna in df.columns:
             df[coluna] = pd.to_numeric(
                 df[coluna], errors="coerce"
             )
+
+    for coluna in COLUNAS_MONETARIAS_EM_MIL:
+        if coluna in df.columns:
+            df[coluna] = df[coluna] * 1000
 
     df["Ano_Numero"] = (
         df["Ano"].astype(str)
@@ -92,7 +118,32 @@ def carregar_indicadores():
 
     return df
 
-#calculando as médias dos indicadores por ano, para exibir no dashboard
+
+@st.cache_data
+def carregar_dicionario():
+
+    if not CAMINHO_PLANILHA.is_file():
+        raise FileNotFoundError(
+            "A planilha Analise_Financeira.xlsx não foi encontrada. "
+            f"Caminho esperado: {CAMINHO_PLANILHA}"
+        )
+
+    dicionario = pd.read_excel(
+        CAMINHO_PLANILHA,
+        sheet_name=ABA_DICIONARIO,
+        header=3,
+    )
+
+    dicionario = dicionario.dropna(how="all")
+    dicionario = dicionario.dropna(subset=["Indicador"])
+
+    dicionario["Indicador"] = dicionario["Indicador"].replace(
+        NOMES_EM_PORTUGUES
+    )
+
+    return dicionario.reset_index(drop=True)
+
+
 @st.cache_data
 def resumir_indicadores():
 
@@ -127,7 +178,7 @@ def resumir_indicadores():
 
     return resumo
 
-#carregando a base larga do demonstrativo, usada na página de regressão
+
 @st.cache_data
 def carregar_demonstrativo():
 
