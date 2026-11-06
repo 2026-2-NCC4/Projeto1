@@ -3,8 +3,6 @@ import streamlit as st
 from components.auth import usuario_logado
 
 
-# Termos que cada página mostra. A busca procura em todas as páginas e
-# oferece um botão para ir até a página onde o termo aparece.
 BUSCA_POR_PAGINA = {
     "Visão Geral": {
         "EBITDA": ["ebitda", "resultado operacional"],
@@ -25,13 +23,26 @@ BUSCA_POR_PAGINA = {
         "Capital investido": ["capital investido", "capital"],
         "Tabela de indicadores": ["tabela", "indicadores", "kpi", "kpis"],
     },
+    "Tendência": {
+        "Evolução ao longo dos anos": ["tendência", "tendencia", "evolução", "evolucao", "histórico", "historico"],
+        "Faixa P10–P90": ["p10", "p90", "percentil", "dispersão", "dispersao"],
+        "Alertas": ["alerta", "alertas", "oscilação", "oscilacao"],
+    },
     "Comparação": {
-        "Comparação de cenários": ["comparar", "comparação", "comparacao", "cenários", "cenarios"],
+        "Comparação de cenários": ["comparar", "comparação", "comparacao", "cenários", "cenarios", "lado a lado"],
         "EBITDA × Margem EBITDA": ["ebitda", "margem ebitda"],
     },
     "Ranking": {
         "Ranking de cenários": ["ranking", "melhores", "piores", "classificação", "classificacao"],
-        "EBITDA por cenário": ["ebitda", "maiores", "menores"],
+        "10 maiores e 10 menores": ["maiores", "menores", "top 10", "extremos", "lista completa"],
+    },
+    "Metas x Realizado": {
+        "Meta analítica": ["meta", "metas", "percentil", "realizado", "atingimento"],
+        "Status das metas": ["atingida", "atenção", "atencao", "crítica", "critica"],
+    },
+    "Sensibilidade": {
+        "Análise de sensibilidade": ["sensibilidade", "choque", "variação de 10%", "variacao de 10%"],
+        "Simulação de indicadores": ["simulação de indicadores", "simulacao de indicadores", "wacc", "roic", "pmr", "pmp", "capex"],
     },
     "Regressão": {
         "Regressão": ["regressão", "regressao", "modelo", "geração de caixa", "geracao de caixa"],
@@ -82,11 +93,23 @@ AJUDA_POR_PAGINA = {
         ),
     "Comparação": (
         "A página de Comparação coloca cenários lado a lado no mesmo ano. "
-        "Escolha o ano e os cenários que quer comparar para ver EBITDA e Margem EBITDA de cada um."
+        "Escolha o ano e os cenários que quer comparar para ver todos os indicadores, "
+        "agrupados por tema, e a posição de cada um no gráfico de EBITDA e Margem EBITDA."
     ),
     "Ranking": (
-        "O Ranking ordena os cenários pelo EBITDA no ano escolhido, mostrando os de maior "
-        "e de menor resultado."
+        "O Ranking ordena os cenários pelo indicador escolhido no ano selecionado. "
+        "Os dois gráficos mostram os 10 maiores e os 10 menores, e a lista completa "
+        "fica logo abaixo."
+    ),
+    "Metas x Realizado": (
+        "Compara o resultado de um cenário com uma meta analítica: o percentil escolhido "
+        "dos valores de todos os cenários no mesmo ano. Não é uma meta orçamentária. "
+        "Escolha ano, cenário, percentil e os indicadores analisados."
+    ),
+    "Sensibilidade": (
+        "Mostra quanto a geração de caixa muda se cada fator variar 10% (regressão) e permite "
+        "simular a variação de WACC, ROIC, margem, receita, prazos e investimentos sobre o indicador "
+        "relacionado. São estimativas, não previsões."
     ),
     "Regressão": (
         "A página de Regressão responde o que mais influencia a Geração de Caixa, comparando os "
@@ -128,7 +151,6 @@ def _normalizar(texto):
 
 
 def _buscar(consulta):
-    """Páginas (e itens dentro delas) que combinam com o termo digitado."""
     consulta = _normalizar(consulta)
     resultados = {}
 
@@ -137,13 +159,13 @@ def _buscar(consulta):
 
         for nome, sinonimos in itens.items():
             for termo in (_normalizar(t) for t in [nome, *sinonimos]):
-                # termo dentro da consulta só vale para termos maiores, senão
-                # siglas curtas casariam com qualquer palavra
+
+
                 if consulta in termo or (len(termo) >= 4 and termo in consulta):
                     encontrados.append(nome)
                     break
 
-        # Digitar o nome da página também leva até ela
+
         if not encontrados and consulta in _normalizar(pagina):
             encontrados.append(pagina)
 
@@ -154,8 +176,8 @@ def _buscar(consulta):
 
 
 def _ir_para(pagina):
-    # Callback: roda antes de o menu lateral ser desenhado, então o item
-    # certo já aparece destacado, e pode limpar a busca
+
+
     st.session_state["pagina_atual"] = pagina
     st.session_state["cti_navegar_para"] = pagina
     st.session_state["cti_busca"] = ""
@@ -189,7 +211,7 @@ def _resultados_busca(pagina_atual):
             outras = [p for p in resultados if p != pagina_atual]
             if outras:
                 st.caption("Também aparece em:")
-                # Sempre 4 colunas: com um resultado só, o botão não ocupa a linha toda
+
                 colunas = st.columns(4)
                 for i, pagina in enumerate(outras):
                     with colunas[i % 4]:
