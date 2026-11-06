@@ -1,4 +1,3 @@
-
 import altair as alt
 import numpy as np
 import pandas as pd
@@ -6,10 +5,6 @@ import streamlit as st
 
 from data.load_data import carregar_demonstrativo, carregar_indicadores
 
-
-# ============================================================
-# CONFIGURAÇÃO DOS INDICADORES
-# ============================================================
 
 INDICADORES = {
     "Receita": ("demonstrativo", "DRE - Receita", "Resultados", "moeda", "maior"),
@@ -25,12 +20,29 @@ INDICADORES = {
     "MVA Aproximado": ("indicadores", "MVA Aproximado", "Geração de valor", "moeda", "maior"),
     "LC": ("indicadores", "LC", "Liquidez", "multiplo", "maior"),
     "LS": ("indicadores", "LS", "Liquidez", "multiplo", "maior"),
+    "ROE": ("indicadores", "ROE", "Rentabilidade", "percentual", "maior"),
+    "ROE DuPont": ("indicadores", "ROE DuPont", "Rentabilidade", "percentual", "maior"),
+    "DuPont - Margem Líquida": ("indicadores", "DuPont - Margem Líquida", "Rentabilidade", "percentual", "maior"),
+    "DuPont - Giro do Ativo": ("indicadores", "DuPont - Giro do Ativo", "Rentabilidade", "multiplo", "maior"),
+    "DuPont - Alavancagem": ("indicadores", "DuPont - Alavancagem", "Rentabilidade", "multiplo", "menor"),
+    "CCL": ("indicadores", "CCL", "Capital de giro", "moeda", "maior"),
+    "PMR": ("indicadores", "PMR", "Capital de giro", "dias", "menor"),
+    "PMP": ("indicadores", "PMP", "Capital de giro", "dias", "maior"),
+    "Ciclo Financeiro": ("indicadores", "Ciclo Financeiro", "Capital de giro", "dias", "menor"),
+    "Necessidade de Capital de Giro": ("indicadores", "Necessidade de Capital de Giro", "Capital de giro", "moeda", "menor"),
+    "Taxa de Conversão da Receita em Caixa": ("indicadores", "Taxa de Conversão da Receita em Caixa", "Fluxo de caixa", "percentual", "maior"),
+    "FCO": ("indicadores", "FCO", "Fluxo de caixa", "moeda", "maior"),
+    "FCO / EBITDA": ("indicadores", "FCO / EBITDA", "Fluxo de caixa", "multiplo", "maior"),
+    "FCO / Lucro Líquido": ("indicadores", "FCO / Lucro Líquido", "Fluxo de caixa", "multiplo", "maior"),
+    "FCL": ("indicadores", "FCL", "Fluxo de caixa", "moeda", "maior"),
+    "Investimentos / Receita": ("indicadores", "Investimentos / Receita", "Investimentos", "percentual", "menor"),
+    "Investimentos / Depreciação": ("indicadores", "Investimentos / Depreciação", "Investimentos", "multiplo", "maior"),
+    "Cobertura de Juros": ("indicadores", "Cobertura de Juros", "Cobertura", "multiplo", "maior"),
+    "FCO / Dívida Bruta": ("indicadores", "FCO / Dívida Bruta", "Cobertura", "percentual", "maior"),
+    "Distribuição / Lucro Líquido": ("indicadores", "Distribuição / Lucro Líquido", "Distribuição", "percentual", "menor"),
+    "Cobertura de Dividendos": ("indicadores", "Cobertura de Dividendos", "Distribuição", "multiplo", "maior"),
 }
 
-
-# ============================================================
-# ESTILO VISUAL
-# ============================================================
 
 PAGE_STYLE = """
 <style>
@@ -78,10 +90,6 @@ PAGE_STYLE = """
 """
 
 
-# ============================================================
-# FUNÇÕES AUXILIARES
-# ============================================================
-
 def _numero(valor, casas=2):
 
     if pd.isna(valor):
@@ -117,12 +125,11 @@ def _formatar(valor, unidade):
     if unidade == "multiplo":
         return f"{_numero(valor)}x"
 
+    if unidade == "dias":
+        return f"{_numero(valor, 1)} dias"
+
     return _numero(valor)
 
-
-# ============================================================
-# CARREGAMENTO E TRATAMENTO DOS INDICADORES
-# ============================================================
 
 def _carregar_indicador(nome):
 
@@ -168,7 +175,10 @@ def _carregar_indicador(nome):
         )
 
     dados["Cenario"] = pd.to_numeric(
-        dados["Cenario"],
+        dados["Cenario"].astype(str).str.extract(
+            r"(\d+)(?:\.0+)?\s*$",
+            expand=False
+        ),
         errors="coerce"
     )
 
@@ -184,7 +194,7 @@ def _carregar_indicador(nome):
     dados["Ano"] = dados["Ano"].astype(int)
     dados["Cenario"] = dados["Cenario"].astype(int)
 
-    # Garante uma observação por cenário e ano.
+
     dados = (
         dados.groupby(
             ["Ano", "Cenario"],
@@ -196,10 +206,6 @@ def _carregar_indicador(nome):
 
     return dados
 
-
-# ============================================================
-# RESUMO ESTATÍSTICO
-# ============================================================
 
 def _resumo_anual(dados):
 
@@ -237,17 +243,13 @@ def _variacoes(resumo):
     return df
 
 
-# ============================================================
-# ALERTAS AUTOMÁTICOS
-# ============================================================
-
 def _alertas(resumo, variacoes):
 
     alertas = []
 
     validas = variacoes.dropna()
 
-    # Identificação de oscilações incomuns.
+
     if len(validas) >= 4:
 
         mediana = validas["Variacao"].median()
@@ -272,7 +274,7 @@ def _alertas(resumo, variacoes):
                     )
                 ))
 
-    # Identificação de dispersão elevada entre cenários.
+
     temp = resumo.copy()
 
     temp["Dispersao"] = (
@@ -324,10 +326,6 @@ def _alertas(resumo, variacoes):
     return alertas
 
 
-# ============================================================
-# GRÁFICO DE EVOLUÇÃO HISTÓRICA
-# ============================================================
-
 def _grafico_evolucao(dados, resumo, cenario):
 
     destaque = dados.loc[
@@ -354,7 +352,7 @@ def _grafico_evolucao(dados, resumo, cenario):
         color="#8CBCE5",
         opacity=.25
     ).encode(
-        x=alt.X("Ano:O", title="Ano"),
+        x=alt.X("Ano:O", title="Ano", axis=alt.Axis(labelAngle=0)),
         y=alt.Y("P10:Q", title="Valor"),
         y2="P90:Q",
         tooltip=[
@@ -368,7 +366,7 @@ def _grafico_evolucao(dados, resumo, cenario):
         point=True,
         strokeWidth=3
     ).encode(
-        x=alt.X("Ano:O", title="Ano"),
+        x=alt.X("Ano:O", title="Ano", axis=alt.Axis(labelAngle=0)),
         y=alt.Y(
             "Valor:Q",
             title="Valor",
@@ -408,10 +406,6 @@ def _grafico_evolucao(dados, resumo, cenario):
     )
 
 
-# ============================================================
-# GRÁFICO DE VARIAÇÃO ANUAL
-# ============================================================
-
 def _grafico_variacao(variacoes):
 
     dados = variacoes.dropna(
@@ -434,7 +428,7 @@ def _grafico_variacao(variacoes):
             cornerRadiusTopRight=5
         )
         .encode(
-            x=alt.X("Ano:O", title="Ano"),
+            x=alt.X("Ano:O", title="Ano", axis=alt.Axis(labelAngle=0)),
             y=alt.Y(
                 "Variacao:Q",
                 title="Variação anual",
@@ -466,10 +460,6 @@ def _grafico_variacao(variacoes):
         )
     )
 
-
-# ============================================================
-# GRÁFICO DE DISTRIBUIÇÃO
-# ============================================================
 
 def _grafico_distribuicao(dados, ano):
 
@@ -540,10 +530,6 @@ def _grafico_distribuicao(dados, ano):
     )
 
 
-# ============================================================
-# CARDS DO RESUMO
-# ============================================================
-
 def _kpi(coluna, titulo, valor, nota):
 
     with coluna:
@@ -560,10 +546,6 @@ def _kpi(coluna, titulo, valor, nota):
             st.caption(nota)
 
 
-# ============================================================
-# PÁGINA PRINCIPAL
-# ============================================================
-
 def render_tendencias():
 
     st.markdown(
@@ -573,9 +555,6 @@ def render_tendencias():
 
     with st.container(key="tend_page"):
 
-        # ----------------------------------------------------
-        # CABEÇALHO
-        # ----------------------------------------------------
 
         st.markdown(
             "##### PAINEL FINANCEIRO"
@@ -588,9 +567,6 @@ def render_tendencias():
             "dos cenários e os principais sinais de atenção."
         )
 
-        # ----------------------------------------------------
-        # FILTROS
-        # ----------------------------------------------------
 
         nomes = list(INDICADORES)
 
@@ -678,7 +654,7 @@ def render_tendencias():
                 key="tend_cenario"
             )
 
-        # Aplica o período selecionado.
+
         dados = dados[
             dados["Ano"].between(
                 periodo[0],
@@ -698,9 +674,6 @@ def render_tendencias():
 
         _, _, _, unidade, direcao = INDICADORES[indicador]
 
-        # ----------------------------------------------------
-        # EVOLUÇÃO HISTÓRICA
-        # ----------------------------------------------------
 
         with st.container(key="tend_evolucao"):
 
@@ -752,9 +725,6 @@ def render_tendencias():
                     "sem deixar que valores extremos dominem a análise."
                 )
 
-        # ----------------------------------------------------
-        # VARIAÇÃO ANUAL E DISTRIBUIÇÃO
-        # ----------------------------------------------------
 
         col_var, col_dist = st.columns(
             2,
@@ -852,9 +822,6 @@ def render_tendencias():
                     "Linha verde: mediana | Linha laranja: média."
                 )
 
-        # ----------------------------------------------------
-        # ALERTAS AUTOMÁTICOS
-        # ----------------------------------------------------
 
         with st.container(key="tend_alertas"):
 
@@ -876,9 +843,6 @@ def render_tendencias():
                     f"**{titulo}**\n\n{texto}"
                 )
 
-        # ----------------------------------------------------
-        # RESUMO DA EVOLUÇÃO
-        # ----------------------------------------------------
 
         validos = resumo.dropna(
             subset=["Media"]
@@ -973,9 +937,6 @@ def render_tendencias():
             "Considera a direção financeira do indicador."
         )
 
-        # ----------------------------------------------------
-        # COMPARAÇÃO COM INDICADOR SECUNDÁRIO
-        # ----------------------------------------------------
 
         if secundario != "Nenhum":
 
@@ -1030,7 +991,8 @@ def render_tendencias():
                         .encode(
                             x=alt.X(
                                 "Ano:O",
-                                title="Ano"
+                                title="Ano",
+                                axis=alt.Axis(labelAngle=0)
                             ),
                             y=alt.Y(
                                 "Média:Q",
@@ -1065,9 +1027,6 @@ def render_tendencias():
                     f"Não foi possível carregar o indicador secundário: {erro}"
                 )
 
-        # ----------------------------------------------------
-        # AJUDA
-        # ----------------------------------------------------
 
         with st.container(key="tend_ajuda"):
 
