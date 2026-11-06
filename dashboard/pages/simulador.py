@@ -2,12 +2,13 @@ import altair as alt
 import pandas as pd
 import streamlit as st
 
+from components.como_interpretar import como_interpretar
 from data.load_data import carregar_demonstrativo
 from pages.regressao import _moeda_mi, _num
 
 MEDIA_CENARIOS = "Média dos cenários"
 
-# Premissas que a pessoa ajusta (variação em % sobre a base)
+
 PREMISSAS = {
     "receita": "Receita",
     "custos": "Custos",
@@ -16,7 +17,7 @@ PREMISSAS = {
 }
 LIMITE_PREMISSA = 30
 
-# Colunas usadas na simulação
+
 DRE = {
     "receita": "DRE - Receita",
     "tributos": "DRE - Tributos",
@@ -38,7 +39,7 @@ FLUXO = {
     "caixa": "FLU - Geração de Caixa",
 }
 
-# Alíquota usada quando a base tem prejuízo antes do IR (é a média da base)
+
 ALIQUOTA_PADRAO = -0.342
 
 INDICADORES_GRAFICO = {
@@ -90,8 +91,7 @@ PAGE_STYLE = """
         border-radius: 10px !important;
     }
 
-    /* cartões brancos */
-    .st-key-sim_premissas,
+        .st-key-sim_premissas,
     [class*="st-key-sim_kpi_"],
     .st-key-sim_grafico,
     .st-key-sim_cascata {
@@ -131,8 +131,7 @@ PAGE_STYLE = """
         line-height: 1.5;
     }
 
-    /* cartões da mesma linha com a mesma altura */
-    .st-key-sim_page [data-testid="stHorizontalBlock"]:has([class*="st-key-sim_kpi_"]),
+        .st-key-sim_page [data-testid="stHorizontalBlock"]:has([class*="st-key-sim_kpi_"]),
     .st-key-sim_page [data-testid="stHorizontalBlock"]:has(.st-key-sim_grafico) {
         align-items: stretch;
     }
@@ -231,19 +230,7 @@ PAGE_STYLE = """
 """
 
 
-# ---------- Simulação ----------
-
 def simular(base, premissas):
-    """Aplica as premissas (frações, ex.: 0.10 = +10%) sobre uma linha da base.
-
-    Refaz as contas que fecham na base:
-      Resultado antes do IR = Receita + Tributos + Custos + Depreciação
-                              + Resultado Financeiro + Outros
-      Resultado Líquido     = Resultado antes do IR + IR
-      Geração de Caixa      = soma dos fluxos de caixa do ano
-    Simplificações: os tributos acompanham a receita, a alíquota efetiva de
-    IR é mantida e os investimentos afetam só o caixa. Valores em R$ mi.
-    """
     r, c = premissas["receita"], premissas["custos"]
     t, i = premissas["tributos"], premissas["investimentos"]
 
@@ -261,16 +248,16 @@ def simular(base, premissas):
     antes_ir = antes_ir_base + variacao_operacional
 
     if antes_ir_base > 0:
-        # Mantém a alíquota efetiva da base; sem lucro, sem imposto
+
         aliquota = base[DRE["ir"]] / antes_ir_base
         ir = aliquota * antes_ir if antes_ir > 0 else 0.0
     else:
-        # Base com prejuízo: mantém o IR da base e só tributa se virar lucro
+
         ir = base[DRE["ir"]] + (ALIQUOTA_PADRAO * antes_ir if antes_ir > 0 else 0.0)
 
     resultado = antes_ir + ir
 
-    # Caixa: mesmas variações aplicadas às linhas do fluxo
+
     fator_ir = ir / base[DRE["ir"]] if base[DRE["ir"]] else 1.0
     variacao_caixa = (
         base[FLUXO["receita"]] * r
@@ -294,7 +281,6 @@ def simular(base, premissas):
 
 
 def _base(df, ano, cenario):
-    """Linha (em R$ mi) do cenário escolhido, ou a média dos cenários."""
     colunas = list(DRE.values()) + list(FLUXO.values())
     dados = df[df["Ano"] == ano]
 
@@ -311,14 +297,11 @@ def _margem(valor, receita):
     return valor / receita if receita else float("nan")
 
 
-# ---------- Formatação ----------
-
 def _pct(valor, casas=1):
     return f"{_num(valor * 100, casas)}%"
 
 
 def _compacto(valor):
-    """Rótulo curto para os gráficos: '13,2 bi' / '−850 mi'."""
     if abs(valor) >= 1000:
         return f"{_num(valor / 1000, 1)} bi"
     return f"{_num(valor, 0)} mi"
@@ -338,8 +321,6 @@ def _delta_pp(diferenca):
     classe = "sim-sobe" if pontos > 0 else "sim-desce"
     return classe, f"Δ {'+' if pontos > 0 else '−'}{_num(abs(pontos), 1)} p.p."
 
-
-# ---------- Blocos da página ----------
 
 def _restaurar():
     for chave in PREMISSAS:
@@ -420,8 +401,8 @@ def _premissas():
 
 
 def _kpi(key, rotulo, original, simulado, delta):
-    # Empilhado (simulado em destaque, original embaixo): cabe mesmo com 5 cartões
-    # numa tela estreita, sem os valores se sobreporem
+
+
     classe, texto_delta = delta
     with st.container(key=key):
         st.markdown(
@@ -545,15 +526,14 @@ def _cascata(simulado, ano):
             "Valor": valor, "Cor": cor, "Rotulo": _compacto(valor),
         })
 
-    # Na horizontal: cada etapa numa linha, com o nome à esquerda e o valor ao
-    # lado da barra. Na vertical, 7 barras num cartão estreito se atropelavam.
+
     dados = pd.DataFrame(linhas)
     dados["Direita"] = dados[["Inicio", "Fim"]].max(axis=1)
     eixo_y = alt.Y("Etapa:N", sort=alt.SortField("Ordem"), title=None,
                    axis=alt.Axis(labelLimit=110, labelFontSize=11))
     rotulo_eixo = "replace(format(datum.value, ',.0f'), ',', '.')"
 
-    # Folga à direita para o rótulo da maior barra não ser cortado
+
     menor = min(0.0, float(dados[["Inicio", "Fim"]].min().min()))
     maior = float(dados["Direita"].max())
     escala = alt.Scale(domain=[menor, maior + (maior - menor) * 0.35], nice=False)
@@ -641,8 +621,6 @@ def _insight(premissas, original, simulado, ano):
     )
 
 
-# ---------- Página principal ----------
-
 def render_simulador():
     st.markdown(PAGE_STYLE, unsafe_allow_html=True)
 
@@ -676,3 +654,18 @@ def render_simulador():
             _cascata(simulado, ano)
 
         _insight(premissas, original, simulado, ano)
+
+        como_interpretar(
+            "sim",
+            [
+                "**Premissas:** escolha quanto Receita, Custos, Tributos e "
+                "Investimentos mudam, em %. Use Restaurar para voltar a zero.",
+                "**Cards:** comparam o valor original com o simulado.",
+                "**Gráfico por ano:** mostra o indicador escolhido ao longo dos "
+                "anos, antes e depois da simulação.",
+                "**Cascata:** mostra como a receita simulada chega ao resultado, "
+                "passo a passo.",
+            ],
+            "a simulação refaz as contas com regras simplificadas e não "
+            "representa uma previsão.",
+        )
