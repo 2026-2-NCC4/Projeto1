@@ -4,7 +4,9 @@ import altair as alt
 import pandas as pd
 import streamlit as st
 
+from components.como_interpretar import como_interpretar
 from data.load_data import carregar_indicadores
+from pages.indicadores import INDICADORES
 
 
 PAGE_STYLE = """
@@ -41,6 +43,7 @@ PAGE_STYLE = """
         color: var(--cti-muted) !important;
     }
 
+    .st-key-comp_selecao,
     .st-key-comp_grafico,
     .st-key-comp_tabela_comparacao,
     .st-key-comp_todos {
@@ -49,6 +52,12 @@ PAGE_STYLE = """
         border-radius: 14px;
         box-shadow: 0 2px 10px rgba(0, 75, 133, .05);
         padding: 18px 22px;
+        box-sizing: border-box;
+    }
+
+    .st-key-comp_grafico,
+    .st-key-comp_tabela_comparacao {
+        height: 100%;
     }
 
     .comp-card-title {
@@ -101,11 +110,11 @@ COLUNAS_COMPARACAO = [
     "FCO / EBITDA",
     "FCO / Lucro Líquido",
     "FCL",
-    "Capex / Receita",
-    "Capex / D&A",
+    "Investimentos / Receita",
+    "Investimentos / Depreciação",
     "Cobertura de Juros",
     "FCO / Dívida Bruta",
-    "Payout em Caixa",
+    "Distribuição / Lucro Líquido",
     "Cobertura de Dividendos",
     "DuPont - Margem Líquida",
     "DuPont - Giro do Ativo",
@@ -120,8 +129,8 @@ COLUNAS_MONETARIAS = {
 
 COLUNAS_PERCENTUAIS = {
     "Margem EBITDA", "Margem Líquida", "ROE", "ROIC", "WACC",
-    "Taxa de Conversão da Receita em Caixa", "Capex / Receita",
-    "FCO / Dívida Bruta", "Payout em Caixa",
+    "Taxa de Conversão da Receita em Caixa", "Investimentos / Receita",
+    "FCO / Dívida Bruta", "Distribuição / Lucro Líquido",
     "DuPont - Margem Líquida", "ROE DuPont",
 }
 
@@ -211,12 +220,19 @@ def _moeda_mi(valor):
     if pd.isna(valor):
         return "N/D"
 
-    valor = float(valor)
+    valor = float(valor) / 1_000_000
     sinal = "−" if valor < 0 else ""
-    numero = f"{abs(valor):,.2f}".replace(",", "X")
-    numero = numero.replace(".", ",").replace("X", ".")
 
-    return f"{sinal}R$ {numero} mi"
+    if abs(valor) >= 1000:
+        numero = f"{abs(valor) / 1000:,.2f}"
+        unidade = "bi"
+    else:
+        numero = f"{abs(valor):,.2f}"
+        unidade = "mi"
+
+    numero = numero.replace(",", "X").replace(".", ",").replace("X", ".")
+
+    return f"{sinal}R$ {numero} {unidade}"
 
 
 def _percentual(valor):
@@ -242,7 +258,7 @@ def _formatar_indicador(indicador, valor):
     if indicador in {
         "FCO / EBITDA",
         "FCO / Lucro Líquido",
-        "Capex / D&A",
+        "Investimentos / Depreciação",
         "Cobertura de Juros",
         "Cobertura de Dividendos",
         "DuPont - Giro do Ativo",
@@ -306,17 +322,29 @@ def _grafico_cenarios(dados, selecionados):
                 ),
             ],
         )
-        .properties(height=320)
+        .properties(height=340)
     )
 
     st.altair_chart(grafico, use_container_width=True)
+
+
+def _indicadores_ordenados(colunas):
+    grupos = list(dict.fromkeys(
+        config["grupo"] for config in INDICADORES.values()
+    ))
+
+    def chave(indicador):
+        grupo = INDICADORES.get(indicador, {}).get("grupo", "")
+        posicao = grupos.index(grupo) if grupo in grupos else len(grupos)
+        return (posicao, colunas.index(indicador))
+
+    return sorted(colunas, key=chave)
 
 
 def _tabela_comparacao(dados_ano, selecionados):
     selecionados_df = dados_ano.loc[
         dados_ano["Cenario"].isin(selecionados)
     ].copy()
-
 
     duplicados = selecionados_df.duplicated(
         subset=["Cenario"],
@@ -331,6 +359,23 @@ def _tabela_comparacao(dados_ano, selecionados):
             unsafe_allow_html=True,
         )
 
+        if len(selecionados) < 2:
+            st.markdown(
+                '<div class="comp-card-note">'
+                "Selecione pelo menos dois cenários para ver os indicadores "
+                "lado a lado. O gráfico mostra todos os cenários do ano."
+                "</div>",
+                unsafe_allow_html=True,
+            )
+            return
+
+        st.markdown(
+            '<div class="comp-card-note">'
+            "Indicadores agrupados por tema, para os cenários escolhidos."
+            "</div>",
+            unsafe_allow_html=True,
+        )
+
         if duplicados.any():
             st.warning(
                 "Há mais de um registro para pelo menos um cenário "
@@ -339,16 +384,19 @@ def _tabela_comparacao(dados_ano, selecionados):
             )
             return
 
-        linhas = []
-
-        indicadores_existentes = [
+        existentes = [
             indicador
             for indicador in COLUNAS_COMPARACAO
             if indicador in selecionados_df.columns
         ]
 
-        for indicador in indicadores_existentes:
-            linha = {"Indicador": indicador}
+        linhas = []
+
+        for indicador in _indicadores_ordenados(existentes):
+            linha = {
+                "Grupo": INDICADORES.get(indicador, {}).get("grupo", ""),
+                "Indicador": indicador,
+            }
 
             for cenario in selecionados:
                 registro = selecionados_df.loc[
@@ -356,9 +404,9 @@ def _tabela_comparacao(dados_ano, selecionados):
                 ].iloc[0]
 
                 linha[_rotulo_cenario(cenario)] = _formatar_indicador(
-                indicador,
-                registro[indicador],
-            )
+                    indicador,
+                    registro[indicador],
+                )
 
             linhas.append(linha)
 
@@ -366,6 +414,7 @@ def _tabela_comparacao(dados_ano, selecionados):
             pd.DataFrame(linhas),
             hide_index=True,
             use_container_width=True,
+            height=340,
         )
 
 
@@ -377,10 +426,17 @@ def _tabela_todos_os_cenarios(dados_ano):
         )
         st.markdown(
             '<div class="comp-card-note">'
-            "Indicadores disponíveis na planilha financeira."
+            "Tabela completa, ordenada pelo EBITDA. Marque a opção abaixo "
+            "para carregá-la."
             "</div>",
             unsafe_allow_html=True,
         )
+
+        if not st.checkbox(
+            "Mostrar a tabela de todos os cenários",
+            key="comp_mostrar_todos",
+        ):
+            return
 
         indicadores_existentes = [
             coluna
@@ -401,15 +457,17 @@ def _tabela_todos_os_cenarios(dados_ano):
         )
 
         for indicador in indicadores_existentes:
-            tabela[indicador] = tabela[indicador].apply(
-                lambda valor: _formatar_indicador(indicador, valor)
+            tabela[indicador] = tabela[indicador].map(
+                lambda valor, nome=indicador: _formatar_indicador(nome, valor)
             )
 
         st.dataframe(
             tabela,
             hide_index=True,
             use_container_width=True,
+            height=420,
         )
+
 
 def render_comparacao():
     st.markdown(PAGE_STYLE, unsafe_allow_html=True)
@@ -500,33 +558,46 @@ def render_comparacao():
                 placeholder="Selecione pelo menos dois cenários",
             )
 
-        with st.container(key="comp_grafico"):
-            st.markdown(
-                '<div class="comp-card-title">EBITDA × Margem EBITDA</div>',
-                unsafe_allow_html=True,
-            )
-            st.markdown(
-                '<div class="comp-card-note">'
-                "Cada ponto representa um cenário disponível no ano escolhido."
-                "</div>",
-                unsafe_allow_html=True,
-            )
+        col_grafico, col_tabela = st.columns([1.1, 1], gap="medium")
 
-            _grafico_cenarios(dados_ano, selecionados)
+        with col_grafico:
+            with st.container(key="comp_grafico"):
+                st.markdown(
+                    '<div class="comp-card-title">EBITDA × Margem EBITDA</div>',
+                    unsafe_allow_html=True,
+                )
+                st.markdown(
+                    '<div class="comp-card-note">'
+                    "Cada ponto é um cenário do ano escolhido. Os cenários "
+                    "selecionados aparecem em azul."
+                    "</div>",
+                    unsafe_allow_html=True,
+                )
 
-        if len(selecionados) >= 2:
+                _grafico_cenarios(dados_ano, selecionados)
+
+        with col_tabela:
             _tabela_comparacao(dados_ano, selecionados)
-        else:
-            st.info(
-                "Selecione pelo menos dois cenários para ver os indicadores "
-                "lado a lado. O gráfico mostra os cenários disponíveis "
-                "para o ano escolhido."
-            )
 
         _tabela_todos_os_cenarios(dados_ano)
 
+        como_interpretar(
+            "comp",
+            [
+                "**Gráfico:** cada ponto é um cenário. Quanto mais à direita, "
+                "maior o EBITDA; quanto mais acima, maior a margem.",
+                "**Comparação lado a lado:** escolha dois ou mais cenários para "
+                "ver todos os indicadores do mesmo ano, agrupados por tema.",
+                "**Vazio ou N/D:** indicadores que usam o ano anterior (ROE, "
+                "FCO, FCL e coberturas) não existem no Ano 1.",
+                "**Unidades:** valores em reais aparecem em milhões (mi) ou "
+                "bilhões (bi); percentuais em %; prazos em dias; coberturas "
+                "e giros em vezes (x).",
+            ],
+        )
+
         st.caption(
             "Fonte: aba _Indicadores da planilha Analise_Financeira.xlsx. "
-            "A tabela mostra EBITDA e EVA na unidade original; "
-            "o gráfico apresenta EBITDA em R$ milhões."
+            "O gráfico e as tabelas usam a mesma unidade: valores em reais "
+            "exibidos em milhões ou bilhões."
         )
