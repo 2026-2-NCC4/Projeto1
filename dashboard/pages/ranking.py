@@ -4,7 +4,8 @@ import altair as alt
 import pandas as pd
 import streamlit as st
 
-from data.load_data import carregar_demonstrativo, carregar_indicadores
+from components.como_interpretar import como_interpretar
+from data.load_data import carregar_indicadores
 from pages.indicadores import INDICADORES
 
 
@@ -86,11 +87,34 @@ PAGE_STYLE = """
 """
 
 
-def _moeda_mi(valor):
-    texto = f"{abs(float(valor)):,.2f}".replace(",", "X")
+def _numero_br(valor, casas=2):
+    texto = f"{abs(float(valor)):,.{casas}f}".replace(",", "X")
     texto = texto.replace(".", ",").replace("X", ".")
     sinal = "−" if float(valor) < 0 else ""
-    return f"{sinal}R$ {texto} mi"
+    return f"{sinal}{texto}"
+
+
+def _moeda_mi(valor):
+    if abs(float(valor)) >= 1000:
+        return f"R$ {_numero_br(float(valor) / 1000)} bi"
+
+    return f"R$ {_numero_br(valor)} mi"
+
+
+def _formatar_valor(valor, formato):
+    if formato == "moeda":
+        return _moeda_mi(valor)
+
+    if formato == "percentual":
+        return f"{_numero_br(valor)}%"
+
+    if formato == "dias":
+        return f"{_numero_br(valor, 1)} dias"
+
+    if formato == "multiplo":
+        return f"{_numero_br(valor)}x"
+
+    return _numero_br(valor)
 
 
 def _rotulo_cenario(valor):
@@ -121,53 +145,48 @@ def _card_metrica(rotulo, valor, detalhe):
     )
 
 
-def _grafico_ranking(dados, titulo, indicador, formato, chave, ordem):
-    unidades = {
-        "moeda": "R$ milhões",
-        "percentual": "%",
-        "dias": "dias",
-        "multiplo": "vezes",
-        "numero": "unidades",
-    }
-
-    unidade = unidades.get(formato, "unidades")
-
+def _grafico_ranking(dados, titulo, indicador, formato, chave, cor, ordem):
     with st.container(key=chave):
         st.markdown(
             f'<div class="rank-card-title">{titulo}</div>',
             unsafe_allow_html=True,
         )
 
+        if formato == "moeda":
+            eixo = f"{indicador} (R$ milhões)"
+        elif formato == "percentual":
+            eixo = indicador + " (%)"
+        elif formato == "dias":
+            eixo = indicador + " (dias)"
+        elif formato == "multiplo":
+            eixo = indicador + " (vezes)"
+        else:
+            eixo = indicador
+
         grafico = (
             alt.Chart(dados)
-            .mark_bar(color="#1677E8", cornerRadiusEnd=4)
+            .mark_bar(color=cor, cornerRadiusEnd=4)
             .encode(
                 x=alt.X(
-                    "Valor_Grafico:Q",
-                    title=f"{indicador} ({unidade})",
-                    axis=alt.Axis(format=",.2f"),
+                    "Valor:Q",
+                    title=eixo,
+                    axis=alt.Axis(labelAngle=0, format=",.1f"),
                 ),
                 y=alt.Y(
                     "Cenário:N",
-                    sort=alt.SortField(
-                        field="Valor_Grafico",
-                        order=ordem,
-                    ),
+                    sort=ordem,
                     title=None,
                 ),
                 tooltip=[
-                    alt.Tooltip("Cenário:N", title="Cenário"),
-                    alt.Tooltip(
-                        "Valor_Grafico:Q",
-                        title=f"{indicador} ({unidade})",
-                        format=",.2f",
-                    ),
+                    alt.Tooltip("Cenário:N"),
+                    alt.Tooltip("Valor:Q", title=indicador, format=",.2f"),
                 ],
             )
-            .properties(height=350)
+            .properties(height=360)
         )
 
         st.altair_chart(grafico, use_container_width=True)
+
 
 def render_ranking():
     st.markdown(PAGE_STYLE, unsafe_allow_html=True)
@@ -196,10 +215,6 @@ def render_ranking():
             .tolist()
         )
 
-        if not anos:
-            st.warning("Não há anos disponíveis para análise.")
-            return
-
         with st.container(key="rank_topo"):
             titulo, coluna_ano, coluna_metrica, coluna_botao = st.columns(
                 [2.7, 1, 1.4, 1.3],
@@ -212,7 +227,7 @@ def render_ranking():
                     <div class="rank-eyebrow">PAINEL FINANCEIRO</div>
                     <div class="rank-title">Ranking de cenários</div>
                     <div class="rank-subtitle">
-                        Compare os resultados dos cenários por indicador financeiro.
+                        Classifique os cenários pelo indicador selecionado.
                     </div>
                     """,
                     unsafe_allow_html=True,
@@ -246,7 +261,7 @@ def render_ranking():
                     st.rerun()
 
         dados_ano = df.loc[
-            pd.to_numeric(df["Ano_Numero"], errors="coerce").eq(ano),
+            df["Ano_Numero"].eq(ano),
             ["Cenario", indicador],
         ].copy()
 
@@ -256,205 +271,119 @@ def render_ranking():
         )
 
         dados_ano = (
-            dados_ano.dropna(subset=["Cenario", indicador])
+            dados_ano.dropna()
             .groupby("Cenario", as_index=False)[indicador]
             .mean()
+            .sort_values(indicador, ascending=False)
+            .reset_index(drop=True)
         )
 
         if dados_ano.empty:
             st.warning(
-                f"Não há valores de {indicador} disponíveis para {ano}."
+                f"Não há valores de {indicador} disponíveis para o ano {ano}."
             )
             return
 
         formato = INDICADORES[indicador]["formato"]
 
-        unidades = {
-            "moeda": "R$ milhões",
-            "percentual": "%",
-            "dias": "dias",
-            "multiplo": "vezes",
-            "numero": "unidades",
-        }
+        if formato == "moeda":
+            fator = 1 / 1_000_000
+        elif formato == "percentual":
+            fator = 100
+        else:
+            fator = 1
 
-        unidade = unidades.get(formato, "unidades")
-
-        divisor = 1_000_000 if formato == "moeda" else 1
-
-        dados_ano["Valor"] = dados_ano[indicador] / divisor
-
-        escala = 1
-
-        if formato == "percentual":
-            if dados_ano["Valor"].abs().median() <= 1.5:
-                escala = 100
-
-        dados_ano["Valor_Grafico"] = dados_ano["Valor"] * escala
+        dados_ano["Valor"] = dados_ano[indicador] * fator
         dados_ano["Cenário"] = dados_ano["Cenario"].map(_rotulo_cenario)
+        dados_ano["Posição"] = range(1, len(dados_ano) + 1)
 
-        maiores = dados_ano.nlargest(10, "Valor").sort_values(
-            "Valor",
-            ascending=False,
-        )
+        maior = dados_ano.iloc[0]
+        menor = dados_ano.iloc[-1]
 
-        menores = dados_ano.nsmallest(10, "Valor").sort_values(
-            "Valor",
-            ascending=True,
-        )
+        col_topo, col_base = st.columns(2, gap="medium")
 
-        maior = dados_ano.loc[dados_ano["Valor"].idxmax()]
-        menor = dados_ano.loc[dados_ano["Valor"].idxmin()]
-
-        media = dados_ano["Valor"].mean()
-        amplitude = maior["Valor"] - menor["Valor"]
-        total_cenarios = len(dados_ano)
-
-        def formatar_card(valor):
-            valor = valor * escala
-
-            if formato == "moeda":
-                return _moeda_mi(valor)
-
-            if formato == "percentual":
-                return f"{valor:.2f}%".replace(".", ",")
-
-            if formato == "dias":
-                return f"{valor:.1f} dias".replace(".", ",")
-
-            if formato == "multiplo":
-                return f"{valor:.2f} vezes".replace(".", ",")
-
-            return f"{valor:.2f}".replace(".", ",")
-
-        col_maior, col_menor = st.columns(2)
-
-        with col_maior:
+        with col_topo:
             with st.container(key="rank_kpi_topo"):
                 _card_metrica(
                     f"Maior {indicador}",
-                    formatar_card(maior["Valor"]),
+                    _formatar_valor(maior["Valor"], formato),
                     f"{maior['Cenário']} · Ano {ano}",
                 )
 
-        with col_menor:
+        with col_base:
             with st.container(key="rank_kpi_base"):
                 _card_metrica(
                     f"Menor {indicador}",
-                    formatar_card(menor["Valor"]),
+                    _formatar_valor(menor["Valor"], formato),
                     f"{menor['Cenário']} · Ano {ano}",
                 )
 
-        st.markdown("### Insights do ranking")
+        quantidade = min(10, len(dados_ano))
 
-        st.info(
-            f"O ranking apresenta os valores de **{indicador} ({unidade})** "
-            f"no ano de **{ano}**. Foram analisados **{total_cenarios} "
-            f"cenários**, considerando a média dos registros de cada cenário."
+        maiores = dados_ano.head(quantidade)
+        menores = dados_ano.tail(quantidade).sort_values(
+            "Valor", ascending=True
         )
-
-        col_media, col_amplitude, col_quantidade = st.columns(3)
-
-        with col_media:
-            with st.container(border=True):
-                _card_metrica(
-                    "Média dos cenários",
-                    formatar_card(media),
-                    f"Média de {total_cenarios} cenários",
-                )
-
-        with col_amplitude:
-            with st.container(border=True):
-                _card_metrica(
-                    "Diferença entre extremos",
-                    formatar_card(amplitude),
-                    "Maior valor menos menor valor",
-                )
-
-        with col_quantidade:
-            with st.container(border=True):
-                _card_metrica(
-                    "Cenários analisados",
-                    str(total_cenarios),
-                    f"Ano de referência: {ano}",
-                )
-
-        st.markdown(
-            f"""
-            - **Maior resultado numérico:** {maior['Cenário']}, com
-              {formatar_card(maior['Valor'])}.
-            - **Menor resultado numérico:** {menor['Cenário']}, com
-              {formatar_card(menor['Valor'])}.
-            - **Amplitude:** a diferença entre os extremos é de
-              {formatar_card(amplitude)}.
-            """
-        )
-
-        st.markdown("### Comparação dos cenários")
 
         col_maiores, col_menores = st.columns(2, gap="medium")
 
         with col_maiores:
             _grafico_ranking(
                 maiores,
-                f"10 maiores — {indicador}",
+                f"{quantidade} maiores cenários — {indicador}",
                 indicador,
                 formato,
-                "rank_grafico_maiores",
-                "descending",
+                "rank_maiores",
+                "#1677E8",
+                "-x",
             )
 
         with col_menores:
             _grafico_ranking(
                 menores,
-                f"10 menores — {indicador}",
+                f"{quantidade} menores cenários — {indicador}",
                 indicador,
                 formato,
-                "rank_grafico_menores",
-                "ascending",
+                "rank_menores",
+                "#E7A23B",
+                "x",
             )
 
-        with st.expander("Consultar listas completas dos rankings"):
-            tabela_maiores = maiores[
-                ["Cenário", "Valor_Grafico"]
-            ].copy()
+        with st.expander(
+            f"Ver lista completa dos {len(dados_ano)} cenários",
+            icon=":material/format_list_numbered:",
+        ):
+            lista = dados_ano[["Posição", "Cenário", "Valor"]].copy()
+            lista[f"{indicador}"] = lista["Valor"].apply(
+                lambda valor: _formatar_valor(valor, formato)
+            )
+            lista = lista[["Posição", "Cenário", indicador]]
 
-            tabela_maiores.insert(
-                0,
-                "Posição",
-                range(1, len(tabela_maiores) + 1),
+            st.dataframe(
+                lista,
+                hide_index=True,
+                use_container_width=True,
+                height=420,
             )
 
-            tabela_maiores = tabela_maiores.rename(
-                columns={"Valor_Grafico": f"{indicador} ({unidade})"}
-            )
-
-            tabela_menores = menores[
-                ["Cenário", "Valor_Grafico"]
-            ].copy()
-
-            tabela_menores.insert(
-                0,
-                "Posição",
-                range(1, len(tabela_menores) + 1),
-            )
-
-            tabela_menores = tabela_menores.rename(
-                columns={"Valor_Grafico": f"{indicador} ({unidade})"}
-            )
-
-            lista_maiores, lista_menores = st.columns(2)
-
-            with lista_maiores:
-                st.markdown("**10 maiores cenários**")
-                st.table(tabela_maiores)
-
-            with lista_menores:
-                st.markdown("**10 menores cenários**")
-                st.table(tabela_menores)
+        como_interpretar(
+            "rank",
+            [
+                "**Posição:** os cenários são ordenados do maior para o menor "
+                "valor do indicador no ano escolhido.",
+                "**Maiores e menores:** os dois gráficos mostram os 10 extremos "
+                "da lista. A lista completa fica no quadro abaixo deles.",
+                "**Maior nem sempre é melhor:** em prazos (PMR, ciclo "
+                "financeiro), necessidade de capital de giro e endividamento, "
+                "valores menores costumam ser favoráveis.",
+                "**Valores vazios:** cenários sem valor para o indicador no ano "
+                "não entram no ranking. Indicadores que usam o ano anterior não "
+                "existem no Ano 1.",
+            ],
+        )
 
         st.caption(
             "Fonte: aba _Indicadores da planilha Analise_Financeira.xlsx. "
-            "Os valores representam a média dos registros de cada cenário "
-            "no ano selecionado. A classificação é numérica e não significa, "
-            "necessariamente, melhor ou pior desempenho."
+            "O ranking considera a média dos registros de cada cenário "
+            "no ano selecionado."
         )
