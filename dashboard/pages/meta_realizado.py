@@ -1,14 +1,11 @@
-
-import streamlit as st
-import pandas as pd
+import altair as alt
 import numpy as np
+import pandas as pd
+import streamlit as st
 
+from components.como_interpretar import como_interpretar
 from data.load_data import carregar_demonstrativo
-
-
-# =========================================================
-# CONFIGURAÇÕES
-# =========================================================
+from pages.regressao import VARIAVEIS
 
 INDICADORES_PREFERIDOS = [
     "Receita",
@@ -18,362 +15,417 @@ INDICADORES_PREFERIDOS = [
     "Margem EBITDA",
 ]
 
-INDICADORES_EXCLUIR = {
-    "ano",
-    "cenario",
-    "cenário",
-    "id",
-    "codigo",
-    "código",
+COLUNA_MARGEM = "Margem EBITDA"
+
+CORES_STATUS = {
+    "Atingida": "#258B68",
+    "Atenção": "#E7A23B",
+    "Crítica": "#C65B5B",
 }
 
-def formatar_valor(valor):
+PAGE_STYLE = """
+<style>
+    .st-key-meta_page {
+        padding: 28px 32px 40px;
+        gap: 18px !important;
+    }
+
+    .meta-eyebrow {
+        font-size: 11px;
+        font-weight: 700;
+        letter-spacing: .12em;
+        color: var(--cti-blue);
+        margin-bottom: 4px;
+    }
+
+    .meta-title {
+        font-size: 30px;
+        font-weight: 700;
+        color: var(--cti-text);
+        line-height: 1.15;
+    }
+
+    .meta-subtitle {
+        font-size: 13px;
+        color: var(--cti-muted);
+        margin-top: 4px;
+    }
+
+    .st-key-meta_filtros label p {
+        font-size: 12px !important;
+        color: var(--cti-muted) !important;
+    }
+
+    .st-key-meta_filtros,
+    .st-key-meta_kpi_total,
+    .st-key-meta_kpi_atingidas,
+    .st-key-meta_kpi_atencao,
+    .st-key-meta_kpi_criticas,
+    .st-key-meta_tabela,
+    .st-key-meta_grafico {
+        background: #fff;
+        border: 1px solid #E1ECF7;
+        border-radius: 14px;
+        box-shadow: 0 2px 10px rgba(0, 75, 133, .05);
+        padding: 18px 22px;
+        box-sizing: border-box;
+    }
+
+    .st-key-meta_tabela,
+    .st-key-meta_grafico {
+        height: 100%;
+    }
+
+    .meta-card-title {
+        font-size: 15px;
+        font-weight: 700;
+        color: var(--cti-text);
+        margin-bottom: 4px;
+    }
+
+    .meta-card-note {
+        font-size: 11px;
+        color: #8AA4BF;
+        margin-bottom: 12px;
+    }
+
+    .meta-kpi-label {
+        font-size: 12px;
+        color: var(--cti-muted);
+    }
+
+    .meta-kpi-value {
+        font-size: 26px;
+        font-weight: 700;
+        line-height: 1.3;
+    }
+</style>
+"""
+
+
+def _numero_br(valor, casas=2):
+    texto = f"{abs(float(valor)):,.{casas}f}".replace(",", "X")
+    texto = texto.replace(".", ",").replace("X", ".")
+    sinal = "−" if float(valor) < 0 else ""
+    return f"{sinal}{texto}"
+
+
+def formatar_valor(valor, indicador):
     if pd.isna(valor):
         return "—"
 
+    if indicador == COLUNA_MARGEM:
+        return f"{_numero_br(float(valor) * 100)}%"
+
     valor = float(valor)
 
+    if abs(valor) >= 1_000_000_000:
+        return f"R$ {_numero_br(valor / 1_000_000_000)} bi"
+
     if abs(valor) >= 1_000_000:
-        return f"R$ {valor / 1_000_000:,.2f} mi".replace(",", "X").replace(".", ",").replace("X", ".")
+        return f"R$ {_numero_br(valor / 1_000_000)} mi"
 
     if abs(valor) >= 1_000:
-        return f"R$ {valor / 1_000:,.1f} mil".replace(",", "X").replace(".", ",").replace("X", ".")
+        return f"R$ {_numero_br(valor / 1_000, 1)} mil"
 
-    return f"{valor:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
-
-
-def nome_coluna(nome):
-    return str(nome).strip().lower()
-
-
-def identificar_colunas(df):
-    colunas = []
-
-    for coluna in df.columns:
-        nome = nome_coluna(coluna)
-
-        if nome in INDICADORES_EXCLUIR:
-            continue
-
-        if pd.api.types.is_numeric_dtype(df[coluna]):
-            if df[coluna].nunique(dropna=True) > 1:
-                colunas.append(coluna)
-
-    return colunas
+    return f"R$ {_numero_br(valor)}"
 
 
 def formatar_percentual(valor):
     if pd.isna(valor):
         return "—"
-    return f"{valor:.0f}%"
+
+    return f"{_numero_br(valor, 0)}%"
 
 
-# =========================================================
-# PÁGINA PRINCIPAL
-# =========================================================
+def _classificar(atingimento):
+    if pd.isna(atingimento):
+        return "Indisponível"
 
-def render_meta_realizado():
+    if atingimento >= 100:
+        return "Atingida"
 
-    st.markdown("""
-    <style>
-    .meta-card {
-        background: white;
-        border: 1px solid #E5EAF2;
-        border-radius: 14px;
-        padding: 20px;
-        margin-bottom: 12px;
-    }
+    if atingimento >= 90:
+        return "Atenção"
 
-    .meta-subtitle {
-        color: #718096;
-        font-size: 13px;
-    }
+    return "Crítica"
 
-    .meta-title {
-        color: #17365D;
-        font-size: 23px;
-        font-weight: 700;
-    }
 
-    .status-atingida {
-        color: #16834A;
-        background: #E5F7EC;
-        padding: 5px 10px;
-        border-radius: 20px;
-        font-weight: 600;
-    }
+def _atingimento(realizado, meta):
+    if pd.isna(realizado) or pd.isna(meta) or meta == 0:
+        return np.nan
 
-    .status-atencao {
-        color: #A66B00;
-        background: #FFF3D6;
-        padding: 5px 10px;
-        border-radius: 20px;
-        font-weight: 600;
-    }
+    return 100 + (realizado - meta) / abs(meta) * 100
 
-    .status-critica {
-        color: #C0392B;
-        background: #FDE8E7;
-        padding: 5px 10px;
-        border-radius: 20px;
-        font-weight: 600;
-    }
 
-    div[data-testid="stProgressBar"] > div > div {
-        background-color: #2463A6;
-    }
-    </style>
-    """, unsafe_allow_html=True)
-
-    # -----------------------------------------------------
-    # CARREGAMENTO
-    # -----------------------------------------------------
-
-    try:
-        df = carregar_demonstrativo()
-    except Exception as erro:
-        st.error(f"Não foi possível carregar a base: {erro}")
-        return
-
-    if df is None or df.empty:
-        st.warning("Não existem dados disponíveis na base.")
-        return
-
+def _preparar_base(df):
     df = df.copy()
 
-    # -----------------------------------------------------
-    # IDENTIFICAÇÃO DAS COLUNAS
-    # -----------------------------------------------------
+    colunas_base = {
+        nome: coluna
+        for nome, coluna in VARIAVEIS.items()
+        if coluna in df.columns
+    }
 
-    coluna_ano = next(
-        (c for c in df.columns if nome_coluna(c) in ["ano", "exercicio", "exercício"]),
-        None
-    )
+    precisa = ["DRE - EBITDA", "DRE - Receita", "DRE - Tributos"]
 
-    coluna_cenario = next(
-        (c for c in df.columns if nome_coluna(c) in ["cenario", "cenário"]),
-        None
-    )
+    if all(coluna in df.columns for coluna in precisa):
+        receita_liquida = df["DRE - Receita"] + df["DRE - Tributos"]
+        df[COLUNA_MARGEM] = (
+            df["DRE - EBITDA"]
+            .div(receita_liquida.where(receita_liquida != 0))
+        )
+        colunas_base[COLUNA_MARGEM] = COLUNA_MARGEM
 
-    if coluna_ano is None or coluna_cenario is None:
-        st.error("A base precisa conter as colunas Ano e Cenario.")
+    return df, colunas_base
+
+
+def _grafico_atingimento(resultado):
+    dados = resultado.dropna(subset=["% Atingimento"]).copy()
+
+    if dados.empty:
+        st.info("Não há indicadores com atingimento calculável.")
         return
 
-    indicadores = identificar_colunas(df)
-
-    if not indicadores:
-        st.warning("Não foram encontrados indicadores numéricos para análise.")
-        return
-
-    # -----------------------------------------------------
-    # CABEÇALHO
-    # -----------------------------------------------------
-
-    st.caption("PAINEL FINANCEIRO")
-    st.markdown(
-        '<div class="meta-title">Meta x Realizado</div>',
-        unsafe_allow_html=True
-    )
-    st.markdown(
-        '<div class="meta-subtitle">Explore dados, cenários e recomendações para apoiar decisões.</div>',
-        unsafe_allow_html=True
+    escala = alt.Scale(
+        domain=list(CORES_STATUS.keys()),
+        range=list(CORES_STATUS.values()),
     )
 
-    st.write("")
-
-    # -----------------------------------------------------
-    # FILTROS
-    # -----------------------------------------------------
-
-    col1, col2, col3 = st.columns([1, 1.5, 1.3])
-
-    anos = sorted(df[coluna_ano].dropna().unique(), reverse=True)
-
-    with col1:
-        ano = st.selectbox("Ano", anos)
-
-    df_ano = df[df[coluna_ano] == ano].copy()
-
-    cenarios = sorted(
-        df_ano[coluna_cenario].dropna().unique(),
-        key=lambda x: str(x)
+    barras = (
+        alt.Chart(dados)
+        .mark_bar(cornerRadiusEnd=4, size=22)
+        .encode(
+            x=alt.X(
+                "% Atingimento:Q",
+                title="Atingimento da meta (%)",
+                axis=alt.Axis(labelAngle=0, format=",.0f"),
+            ),
+            y=alt.Y("Indicador:N", sort="-x", title=None),
+            color=alt.Color(
+                "Status:N",
+                scale=escala,
+                legend=alt.Legend(title=None, orient="bottom"),
+            ),
+            tooltip=[
+                alt.Tooltip("Indicador:N"),
+                alt.Tooltip("% Atingimento:Q", title="Atingimento (%)", format=",.1f"),
+                alt.Tooltip("Status:N"),
+            ],
+        )
     )
 
-    with col2:
-        cenario = st.selectbox("Cenário", cenarios)
+    regua = (
+        alt.Chart(pd.DataFrame({"meta": [100]}))
+        .mark_rule(color="#52677D", strokeDash=[4, 3])
+        .encode(x="meta:Q")
+    )
 
-    with col3:
-        percentil = st.selectbox(
-            "Percentil da meta",
-            [50, 60, 75, 90],
-            index=2,
-            format_func=lambda x: f"Percentil {x}"
+    st.altair_chart(
+        (barras + regua).properties(height=max(220, 48 * len(dados))),
+        use_container_width=True,
+    )
+
+
+def render_meta_realizado():
+    st.markdown(PAGE_STYLE, unsafe_allow_html=True)
+
+    with st.container(key="meta_page"):
+        try:
+            df = carregar_demonstrativo()
+        except Exception as erro:
+            st.error(f"Não foi possível carregar a base: {erro}")
+            return
+
+        if df is None or df.empty:
+            st.warning("Não existem dados disponíveis na base.")
+            return
+
+        if "Ano" not in df.columns or "Cenario" not in df.columns:
+            st.error("A base precisa conter as colunas Ano e Cenario.")
+            return
+
+        df, colunas_base = _preparar_base(df)
+
+        if not colunas_base:
+            st.warning("Não foram encontrados indicadores para análise.")
+            return
+
+        st.markdown(
+            """
+            <div class="meta-eyebrow">PAINEL FINANCEIRO</div>
+            <div class="meta-title">Metas x Realizado</div>
+            <div class="meta-subtitle">
+                Compare o resultado de um cenário com uma meta analítica
+                calculada a partir de todos os cenários do mesmo ano.
+            </div>
+            """,
+            unsafe_allow_html=True,
         )
 
-    st.markdown("---")
+        anos = sorted(df["Ano"].dropna().astype(int).unique().tolist())
 
-    # -----------------------------------------------------
-    # CONFIGURAÇÃO DA META
-    # -----------------------------------------------------
+        with st.container(key="meta_filtros"):
+            col_ano, col_cenario, col_percentil = st.columns([1, 1.5, 1.3])
 
-    st.markdown("### Como a meta foi definida")
+            with col_ano:
+                ano = st.selectbox(
+                    "Ano",
+                    options=anos,
+                    index=len(anos) - 1,
+                    format_func=lambda valor: f"Ano {valor}",
+                    key="meta_ano",
+                )
 
-    st.info(
-        f"A meta analítica corresponde ao percentil {percentil} "
-        f"dos valores dos cenários disponíveis para cada indicador no ano de {ano}."
-    )
+            df_ano = df[df["Ano"] == ano].copy()
 
-    # -----------------------------------------------------
-    # CÁLCULOS
-    # -----------------------------------------------------
+            cenarios = sorted(df_ano["Cenario"].dropna().astype(int).unique().tolist())
 
-    df_cenario = df_ano[
-        df_ano[coluna_cenario] == cenario
-    ]
+            with col_cenario:
+                cenario = st.selectbox(
+                    "Cenário",
+                    options=cenarios,
+                    format_func=lambda valor: f"Cenário {valor}",
+                    key="meta_cenario",
+                )
 
-    if df_cenario.empty:
-        st.warning("Não existem dados para o cenário selecionado.")
-        return
+            with col_percentil:
+                percentil = st.selectbox(
+                    "Percentil da meta",
+                    options=[50, 60, 75, 90],
+                    index=2,
+                    format_func=lambda valor: f"Percentil {valor}",
+                    key="meta_percentil",
+                )
 
-    resultados = []
+            padrao = [
+                nome for nome in INDICADORES_PREFERIDOS
+                if nome in colunas_base
+            ]
 
-    for indicador in indicadores:
+            escolhidos = st.multiselect(
+                "Indicadores analisados",
+                options=list(colunas_base.keys()),
+                default=padrao,
+                key="meta_indicadores",
+            )
 
-        valores = pd.to_numeric(
-            df_ano[indicador],
-            errors="coerce"
-        ).dropna()
+        if not escolhidos:
+            st.info("Selecione pelo menos um indicador para a análise.")
+            return
 
-        realizado = pd.to_numeric(
-            df_cenario[indicador],
-            errors="coerce"
-        ).dropna()
+        df_cenario = df_ano[df_ano["Cenario"] == cenario]
 
-        if valores.empty or realizado.empty:
-            continue
+        if df_cenario.empty:
+            st.warning("Não existem dados para o cenário selecionado.")
+            return
 
-        meta = valores.quantile(percentil / 100)
-        valor_realizado = realizado.mean()
+        resultados = []
 
-        # Indicadores em que valores menores são melhores
-        nome = nome_coluna(indicador)
+        for nome in escolhidos:
+            coluna = colunas_base[nome]
 
-        menor_melhor = any(
-            palavra in nome
-            for palavra in ["custo", "despesa", "divida", "dívida", "endividamento"]
-        )
+            valores = pd.to_numeric(df_ano[coluna], errors="coerce").dropna()
+            realizado = pd.to_numeric(df_cenario[coluna], errors="coerce").dropna()
 
-        if meta == 0:
-            atingimento = np.nan
-        elif menor_melhor:
-            atingimento = (meta / valor_realizado) * 100 if valor_realizado != 0 else np.nan
-        else:
-            atingimento = (valor_realizado / meta) * 100
-
-        if pd.isna(atingimento):
-            status = "Indisponível"
-        elif atingimento >= 100:
-            status = "Atingida"
-        elif atingimento >= 90:
-            status = "Atenção"
-        else:
-            status = "Crítica"
-
-        resultados.append({
-            "Indicador": indicador,
-            "Realizado": valor_realizado,
-            "Meta analítica": meta,
-            "% Atingimento": atingimento,
-            "Status": status,
-        })
-
-    if not resultados:
-        st.warning("Não foi possível calcular os indicadores deste cenário.")
-        return
-
-    resultado = pd.DataFrame(resultados)
-
-    # -----------------------------------------------------
-    # CARDS E TABELA
-    # -----------------------------------------------------
-
-    esquerda, direita = st.columns([1.7, 1])
-
-    with esquerda:
-        st.markdown("### Meta x Realizado")
-
-        tabela = resultado.copy()
-
-        tabela["Realizado"] = tabela["Realizado"].apply(formatar_valor)
-        tabela["Meta analítica"] = tabela["Meta analítica"].apply(formatar_valor)
-        tabela["% Atingimento"] = tabela["% Atingimento"].apply(formatar_percentual)
-
-        st.dataframe(
-            tabela,
-            use_container_width=True,
-            hide_index=True,
-            height=300
-        )
-
-    with direita:
-        st.markdown("### Atingimento")
-        st.caption("Progresso por indicador")
-
-        for _, linha in resultado.iterrows():
-
-            indicador = linha["Indicador"]
-            atingimento = linha["% Atingimento"]
-
-            st.markdown(f"**{indicador}**")
-
-            if pd.isna(atingimento):
-                st.caption("Não foi possível calcular o atingimento.")
+            if valores.empty or realizado.empty:
                 continue
 
-            progresso = max(0, min(atingimento / 100, 1))
+            meta = valores.quantile(percentil / 100)
+            valor_realizado = realizado.mean()
+            atingimento = _atingimento(valor_realizado, meta)
 
-            st.progress(progresso)
+            resultados.append({
+                "Indicador": nome,
+                "Realizado": valor_realizado,
+                "Meta analítica": meta,
+                "% Atingimento": atingimento,
+                "Status": _classificar(atingimento),
+            })
 
-            if atingimento >= 100:
+        if not resultados:
+            st.warning("Não foi possível calcular os indicadores deste cenário.")
+            return
+
+        resultado = pd.DataFrame(resultados)
+
+        total = len(resultado)
+        atingidas = int((resultado["Status"] == "Atingida").sum())
+        atencao = int((resultado["Status"] == "Atenção").sum())
+        criticas = int((resultado["Status"] == "Crítica").sum())
+
+        kpis = [
+            ("meta_kpi_total", "Indicadores analisados", total, "var(--cti-blue)"),
+            ("meta_kpi_atingidas", "Metas atingidas", atingidas, CORES_STATUS["Atingida"]),
+            ("meta_kpi_atencao", "Em atenção", atencao, CORES_STATUS["Atenção"]),
+            ("meta_kpi_criticas", "Críticas", criticas, CORES_STATUS["Crítica"]),
+        ]
+
+        for coluna, (chave, rotulo, valor, cor) in zip(st.columns(4, gap="medium"), kpis):
+            with coluna:
+                with st.container(key=chave):
+                    st.markdown(
+                        f'<div class="meta-kpi-label">{rotulo}</div>'
+                        f'<div class="meta-kpi-value" style="color:{cor}">{valor}</div>',
+                        unsafe_allow_html=True,
+                    )
+
+        col_tabela, col_grafico = st.columns([1.35, 1], gap="medium")
+
+        with col_tabela:
+            with st.container(key="meta_tabela"):
                 st.markdown(
-                    f'<span class="status-atingida">{atingimento:.0f}% · Atingida</span>',
-                    unsafe_allow_html=True
+                    '<div class="meta-card-title">Meta x Realizado</div>'
+                    f'<div class="meta-card-note">Cenário {cenario} · Ano {ano} · '
+                    f"meta = percentil {percentil} dos cenários do ano</div>",
+                    unsafe_allow_html=True,
                 )
-            elif atingimento >= 90:
+
+                tabela = resultado.copy()
+                tabela["Realizado"] = [
+                    formatar_valor(valor, nome)
+                    for valor, nome in zip(resultado["Realizado"], resultado["Indicador"])
+                ]
+                tabela["Meta analítica"] = [
+                    formatar_valor(valor, nome)
+                    for valor, nome in zip(resultado["Meta analítica"], resultado["Indicador"])
+                ]
+                tabela["% Atingimento"] = tabela["% Atingimento"].apply(formatar_percentual)
+
+                st.dataframe(
+                    tabela,
+                    use_container_width=True,
+                    hide_index=True,
+                    height=min(460, 40 + 36 * len(tabela)),
+                )
+
+        with col_grafico:
+            with st.container(key="meta_grafico"):
                 st.markdown(
-                    f'<span class="status-atencao">{atingimento:.0f}% · Atenção</span>',
-                    unsafe_allow_html=True
-                )
-            else:
-                st.markdown(
-                    f'<span class="status-critica">{atingimento:.0f}% · Crítica</span>',
-                    unsafe_allow_html=True
+                    '<div class="meta-card-title">Atingimento por indicador</div>'
+                    '<div class="meta-card-note">A linha tracejada marca 100% da meta.</div>',
+                    unsafe_allow_html=True,
                 )
 
-            st.write("")
+                _grafico_atingimento(resultado)
 
-    # -----------------------------------------------------
-    # RESUMO
-    # -----------------------------------------------------
-
-    st.markdown("---")
-    st.markdown("### Resumo da análise")
-
-    total = len(resultado)
-    atingidas = (resultado["Status"] == "Atingida").sum()
-    atencao = (resultado["Status"] == "Atenção").sum()
-    criticas = (resultado["Status"] == "Crítica").sum()
-
-    k1, k2, k3, k4 = st.columns(4)
-
-    k1.metric("Indicadores analisados", total)
-    k2.metric("Metas atingidas", int(atingidas))
-    k3.metric("Em atenção", int(atencao))
-    k4.metric("Críticas", int(criticas))
-
-    st.caption(
-        "Nota: esta é uma meta analítica calculada a partir da distribuição "
-        "dos cenários disponíveis. Ela não representa uma meta orçamentária "
-        "aprovada nem um resultado contábil realizado, a menos que a base "
-        "contenha dados reais identificados dessa forma."
-    )
+        como_interpretar(
+            "meta",
+            [
+                "**Meta analítica:** é o percentil escolhido dos valores de todos "
+                "os cenários no mesmo ano. Não é uma meta orçamentária aprovada.",
+                "**Realizado:** valor do cenário escolhido no ano.",
+                "**% Atingimento:** 100% significa estar exatamente na meta; "
+                "acima de 100%, o cenário está melhor que a meta; abaixo, pior.",
+                "**Custos e despesas:** ficam na base como valores negativos. "
+                "Quanto mais perto de zero, menor o custo e melhor o resultado.",
+                "**Status:** Atingida a partir de 100%, Atenção de 90% a 99% e "
+                "Crítica abaixo de 90%.",
+                "**Margem EBITDA:** calculada como EBITDA dividido pela receita "
+                "líquida (receita menos tributos).",
+            ],
+            "como a meta vem dos próprios cenários, no percentil 75 apenas "
+            "cerca de 25% deles atingem 100% por construção. O status mostra a "
+            "posição relativa do cenário, não um desempenho bom ou ruim em "
+            "termos absolutos.",
+        )
