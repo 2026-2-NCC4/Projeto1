@@ -9,17 +9,16 @@ import plotly.express as px
 import plotly.graph_objects as go
 from html import escape
 
+from components.como_interpretar import como_interpretar
 from data.load_data import carregar_indicadores
 
 from components.auth import usuario_logado
 
-# Mesmo visual da página de Regressão: topo com filtros, cartões brancos.
 
 PAGE_STYLE = """
 
 <style>
 
-/* Área principal da Visão Geral */
 
 .st-key-vg_page {
 
@@ -29,7 +28,6 @@ PAGE_STYLE = """
 
 }
 
-/* Saudação */
 
 .vg-eyebrow {
     color: #1677E8;
@@ -65,7 +63,6 @@ PAGE_STYLE = """
 
 }
 
-/* Títulos das seções */
 
 .vg-section-title {
 
@@ -79,7 +76,6 @@ PAGE_STYLE = """
 
 }
 
-/* Cards de indicadores e gráficos */
 
 [class*="st-key-vg_kpi_"],
 
@@ -111,7 +107,6 @@ PAGE_STYLE = """
     justify-content: center;
 }
 
-/* Destaque discreto ao passar o mouse */
 
 [class*="st-key-vg_kpi_"]:hover,
 
@@ -125,7 +120,6 @@ PAGE_STYLE = """
 
 }
 
-/* Nome do indicador */
 
 .vg-kpi-label {
     font-size: 12px;
@@ -137,7 +131,6 @@ PAGE_STYLE = """
     border-bottom: 1px dotted #9BAFC5;
 }
 
-/* Valor principal */
 
 .vg-kpi-value {
 
@@ -155,7 +148,6 @@ PAGE_STYLE = """
 
 }
 
-/* Descrição do indicador */
 
 .vg-kpi-trend {
     font-size: 11px;
@@ -181,7 +173,6 @@ PAGE_STYLE = """
     color: #FFFFFF !important;
 }
 
-/* Títulos dos gráficos */
 
 .vg-card-title {
 
@@ -205,7 +196,6 @@ PAGE_STYLE = """
 
 }
 
-/* Novas áreas executivas */
 .vg-insight-card {
     background: linear-gradient(135deg, #FFFFFF 0%, #F7FAFE 100%);
     border: 1px solid #E5ECF4;
@@ -256,7 +246,6 @@ PAGE_STYLE = """
 
 """
 
-# ---------- Formatação dos valores ----------
 
 def formatar_moeda(valor):
 
@@ -294,10 +283,8 @@ def formatar_numero(valor):
 
     return f"{valor:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
 
-# ---------- Blocos visuais ----------
 
 def _kpi(key, rotulo, valor, variacao, explicacao):
-    """Card de KPI com explicação ao passar o cursor e comparação anual."""
     valor = valor.replace("R$ ", "R$&nbsp;")
     rotulo_seguro = escape(rotulo)
     explicacao_segura = escape(explicacao, quote=True)
@@ -328,7 +315,6 @@ def _titulo_cartao(titulo, nota=None):
 
     st.markdown(html, unsafe_allow_html=True)
 
-# ---------- Página principal ----------
 
 def render_visao_geral():
 
@@ -372,8 +358,8 @@ def _render_conteudo():
 
     anos = sorted(df["Ano_Numero"].dropna().unique().astype(int).tolist())
     cenarios = sorted(df["Cenario"].dropna().astype(str).unique().tolist())
-    # Os nomes originais são preservados para filtrar os dados; na interface,
-    # exibimos nomes simples e sequenciais para facilitar a leitura.
+
+
     mapa_cenarios = {original: f"Cenário {i + 1}" for i, original in enumerate(cenarios)}
     mapa_cenarios_inverso = {nome_exibicao: original for original, nome_exibicao in mapa_cenarios.items()}
 
@@ -386,7 +372,7 @@ def _render_conteudo():
     primeiro_nome = escape(nome.split()[0]) if nome else ""
     saudacao = f"Olá, {primeiro_nome}! 👋" if primeiro_nome else "Olá! 👋"
 
-    # 1. Topo: saudação + filtros + botão.
+
     opcoes_cenario = ["Todos os cenários"] + list(mapa_cenarios.values())
     indice_cenario = 0
 
@@ -435,13 +421,12 @@ def _render_conteudo():
                         "para o arquivo real da página de simulação."
                     )
 
-    # Mantém os nomes usados pelo restante da página, sem alterar os cálculos existentes.
+
     ano_selecionado = ano
-    # Valor original usado nos filtros, sem alterar a base de dados.
+
     cenario_selecionado = mapa_cenarios_inverso.get(cenario, cenario)
     cenario_exibicao = cenario
 
-    # 3. Aplica os filtros escolhidos.
 
     dados_ano = df[df["Ano_Numero"] == ano_selecionado].copy()
 
@@ -477,7 +462,6 @@ def _render_conteudo():
 
     )
 
-    # 4. Calcula os valores apresentados nos cards.
 
     def obter_valor(coluna):
 
@@ -498,7 +482,6 @@ def _render_conteudo():
         return valores.iloc[0]
 
     def obter_variacao_anual(coluna, explicacao, formato="numero", maior_eh_melhor=True):
-        """Compara o valor do ano selecionado com o ano imediatamente anterior."""
         anos_anteriores = [a for a in anos if a < ano_selecionado]
         if not anos_anteriores or coluna not in df.columns:
             return {"classe": "neutral", "texto": "— sem ano anterior"}
@@ -529,7 +512,7 @@ def _render_conteudo():
             return {"classe": "neutral", "texto": "• Estável vs. ano anterior"}
         subiu = diferenca > 0
         seta = "↑" if subiu else "↓"
-        # Verde/vermelho indicam direção da variação; a seta não afirma, por si só, melhora ou piora.
+
         classe = "positive" if subiu else "negative"
         return {"classe": classe, "texto": f"{seta} {numero}{sufixo}"}
 
@@ -549,7 +532,6 @@ def _render_conteudo():
 
         return int(validos.max()) if not validos.empty else None
 
-    # 5. Primeira linha de indicadores.
 
     _titulo_secao("Desempenho financeiro")
 
@@ -611,7 +593,6 @@ def _render_conteudo():
 
         )
 
-    # 6. Segunda linha de indicadores.
 
     _titulo_secao("Retorno, liquidez e custo de capital")
 
@@ -673,7 +654,47 @@ def _render_conteudo():
 
         )
 
-    # 7. Resumo executivo: leituras descritivas derivadas dos dados disponíveis.
+    _titulo_secao("Rentabilidade, caixa e capital de giro")
+
+    cards_3 = st.columns(4)
+
+    with cards_3[0]:
+        _kpi(
+            "vg_kpi_roe",
+            "ROE",
+            formatar_percentual(obter_valor("ROE")),
+            obter_variacao_anual("ROE", "", "percentual"),
+            "ROE: retorno sobre o patrimônio líquido médio; mostra quanto o lucro rende para o acionista.",
+        )
+
+    with cards_3[1]:
+        _kpi(
+            "vg_kpi_fco",
+            "FCO",
+            formatar_moeda(obter_valor("FCO")),
+            obter_variacao_anual("FCO", "", "moeda"),
+            "FCO: fluxo de caixa operacional estimado a partir da receita, da variação de clientes e dos pagamentos de custos, tributos e imposto de renda.",
+        )
+
+    with cards_3[2]:
+        _kpi(
+            "vg_kpi_fcl",
+            "FCL",
+            formatar_moeda(obter_valor("FCL")),
+            obter_variacao_anual("FCL", "", "moeda"),
+            "FCL: fluxo de caixa livre; é o FCO depois de descontar os investimentos.",
+        )
+
+    with cards_3[3]:
+        _kpi(
+            "vg_kpi_ciclo",
+            "Ciclo Financeiro",
+            formatar_numero(obter_valor("Ciclo Financeiro")),
+            obter_variacao_anual("Ciclo Financeiro", "", "numero"),
+            "Ciclo financeiro: prazo médio de recebimento menos prazo médio de pagamento, em dias.",
+        )
+
+
     _titulo_secao("Leitura executiva")
     st.caption("Destaques calculados automaticamente para o período e cenário selecionados; são comparações descritivas, não metas nem previsões.")
 
@@ -682,6 +703,7 @@ def _render_conteudo():
         ("Margem EBITDA", "Margem EBITDA", "percentual"),
         ("ROIC", "ROIC", "percentual"),
         ("EVA", "EVA", "moeda"),
+        ("FCL", "FCL", "moeda"),
     ]
     destaques = []
     for coluna, nome_indicador, formato in metricas_destaque:
@@ -710,7 +732,7 @@ def _render_conteudo():
                     unsafe_allow_html=True,
                 )
 
-    # Cobertura da base para contextualizar a leitura dos indicadores.
+
     _titulo_secao("Visão da base")
     anos_base = sorted(df["Ano_Numero"].dropna().astype(int).unique().tolist())
     cenarios_base = sorted(df["Cenario"].dropna().astype(str).unique().tolist())
@@ -722,8 +744,7 @@ def _render_conteudo():
     with cobertura_cols[2]:
         st.metric("Registros na base", f"{len(df):,}".replace(",", "."))
 
-    # 8. Evolução anual de EBITDA e Margem EBITDA.
-    # Os gráficos comparam anos, aplicando o filtro de cenário selecionado.
+
     historico_base = df.copy()
     if cenario_selecionado != "Todos os cenários":
         historico_base = historico_base[historico_base["Cenario"].astype(str) == cenario_selecionado]
@@ -790,7 +811,7 @@ def _render_conteudo():
         else:
             st.info("A base não contém a coluna Margem EBITDA.")
 
-    # 9. Evolução de retorno e custo de capital ao longo do tempo.
+
     _titulo_secao("Retorno e custo de capital ao longo do tempo")
     col_retorno, col_valor = st.columns(2, gap="medium")
     with col_retorno, st.container(key="vg_grafico_retorno"):
@@ -822,7 +843,6 @@ def _render_conteudo():
         else:
             st.info("A base não contém as colunas EVA e NOPAT necessárias para este gráfico.")
 
-    # 10. Ressalvas e transparência dos dados.
 
     with st.container(key="vg_qualidade"):
 
@@ -864,7 +884,6 @@ def _render_conteudo():
 
         if ausentes:
 
-            # Um único aviso em lista ocupa bem menos espaço que vários
 
             st.warning("\n".join(f"- {aviso}" for aviso in ausentes))
 
@@ -909,3 +928,20 @@ def _render_conteudo():
             unsafe_allow_html=True,
 
         )
+
+    como_interpretar(
+        "vg",
+        [
+            "**Cards:** mostram o valor do ano e cenário escolhidos. Com "
+            "\"Todos os cenários\", é a média dos cenários.",
+            "**Seta e variação:** comparam com o ano anterior. A cor indica só "
+            "a direção da mudança, não se ela é boa ou ruim.",
+            "**Rentabilidade, caixa e capital de giro:** ROE é o retorno ao "
+            "acionista; FCO e FCL mostram o caixa gerado antes e depois dos "
+            "investimentos; o ciclo financeiro mostra quantos dias o caixa fica "
+            "preso entre pagar e receber.",
+            "**N/D:** indicadores que usam o ano anterior não existem no Ano 1.",
+        ],
+        "os valores vêm da planilha de indicadores e não são recalculados nesta "
+        "tela. Dados ausentes não são preenchidos.",
+    )
