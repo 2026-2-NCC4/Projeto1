@@ -63,7 +63,6 @@ Quando não existem dados suficientes para determinado cálculo, o resultado é 
 ## 📦 Arquivos da Entrega
 
 A planilha final e o documento da atividade estão disponíveis em:
-
-👉 **[Entrega 1 — Contabilidade e Finanças](./entrega%201/contabilidade%20e%20finan%C3%A7as/)**
+**[Entrega 1 — Contabilidade e Finanças](./entrega%201/contabilidade%20e%20finan%C3%A7as/)**
 
 Os notebooks utilizados nos cálculos e análises permanecem organizados na estrutura do projeto.

@@ -1,4 +1,4 @@
-# Entrega 2: Análise de Regressão dos Dados
+# Entrega 2: Análise Inferencial de Dados
 
 ## Descrição
 
@@ -17,7 +17,7 @@ Este repositório traz a segunda entrega da disciplina, cujo objetivo é conduzi
 | Arquivo | Descrição |
 |---|---|
 | `Entrega2_Analise_Regressao.ipynb` | Notebook Jupyter com todo o código da análise, já executado (gráficos e tabelas inclusos) |
-| `Entrega2_RelatorioAR.pdf` | Relatório técnico em PDF com os resultados, tabelas, gráficos e glossário dos termos |
+| `Análise Inferencial - Entrega.pdf` | Relatório técnico em PDF com os resultados, tabelas, gráficos e glossário dos termos |
 
 ## Sobre a base de dados
 
