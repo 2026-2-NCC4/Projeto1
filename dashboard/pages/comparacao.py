@@ -787,9 +787,3 @@ def render_comparacao():
                 "e giros em vezes (x).",
             ],
         )
-
-        st.caption(
-            "Fonte: aba _Indicadores da planilha Analise_Financeira.xlsx. "
-            "Valores em reais aparecem em milhões ou bilhões; percentuais "
-            "em %, prazos em dias e coberturas em vezes."
-        )

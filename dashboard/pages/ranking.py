@@ -400,9 +400,3 @@ def render_ranking():
                 "existem no Ano 1.",
             ],
         )
-
-        st.caption(
-            "Fonte: aba _Indicadores da planilha Analise_Financeira.xlsx. "
-            "O ranking considera a média dos registros de cada cenário "
-            "no ano selecionado."
-        )
