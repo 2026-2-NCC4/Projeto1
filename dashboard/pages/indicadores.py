@@ -66,44 +66,45 @@ PAGE_STYLE = """
     font-size: 11px;
     margin-top: 7px;
 }
-
+.ind-insight-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 340px), 1fr));
+    gap: 16px;
+    align-items: stretch;
+    margin-bottom: 8px;
+}
 .ind-insight {
-    background: linear-gradient(135deg, #FFFFFF 0%, #F7FAFE 100%);
+    background: #FFFFFF;
     border: 1px solid #E3ECF5;
+    border-left: 4px solid #2585C5;
     border-radius: 14px;
-    padding: 19px 20px;
-    min-height: 125px;
-    margin-bottom: 12px;
-    box-shadow: 0 3px 12px rgba(23, 59, 99, 0.045);
+    padding: 20px 24px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    box-shadow: 0 3px 12px rgba(23, 59, 99, 0.05);
     transition: all 0.2s ease;
 }
 .ind-insight:hover {
     border-color: #B9D2E8;
-    box-shadow: 0 5px 16px rgba(23, 59, 99, 0.09);
+    border-left-color: #004B85;
+    box-shadow: 0 6px 18px rgba(23, 59, 99, 0.10);
     transform: translateY(-2px);
+}
+.ind-insight--wide {
+    grid-column: 1 / -1;
+    background: linear-gradient(135deg, #FFFFFF 0%, #F4F8FC 100%);
 }
 .ind-insight-title {
     color: #173B63;
-    font-size: 13px;
+    font-size: 15px;
     font-weight: 750;
-    margin-bottom: 10px;
-    display: flex;
-    align-items: center;
-    gap: 8px;
+    line-height: 1.3;
 }
 .ind-insight-text {
-    color: #61748A;
-    font-size: 12px;
-    line-height: 1.7;
-}
-.ind-insight-title::before {
-    content: "";
-    display: inline-block;
-    width: 7px;
-    height: 7px;
-    min-width: 7px;
-    border-radius: 50%;
-    background: #2585C5;
+    color: #4A5E75;
+    font-size: 14px;
+    line-height: 1.65;
 }
 .ind-info {
     background: #F4F8FC;
@@ -394,14 +395,33 @@ def _card(coluna, titulo, valor, observacao):
         )
 
 
-def _insight(titulo, texto):
+def _html_insight(titulo, texto, largo=False):
+    classe = "ind-insight ind-insight--wide" if largo else "ind-insight"
+    return (
+        f'<div class="{classe}">'
+        f'<div class="ind-insight-title">{titulo}</div>'
+        f'<div class="ind-insight-text">{texto}</div>'
+        f'</div>'
+    )
+
+
+def _grade_insights(esquerda=(), direita=(), abaixo=()):
+    from itertools import zip_longest
+
+    cards = []
+
+    # intercala esquerda/direita para manter a ordem de leitura
+    for e, d in zip_longest(esquerda, direita):
+        for item in (e, d):
+            if item:
+                cards.append(_html_insight(*item))
+
+    # os cards de comparação ocupam a linha inteira
+    for titulo, texto in abaixo:
+        cards.append(_html_insight(titulo, texto, largo=True))
+
     st.markdown(
-        f"""
-        <div class="ind-insight">
-            <div class="ind-insight-title">{titulo}</div>
-            <div class="ind-insight-text">{texto}</div>
-        </div>
-        """,
+        f'<div class="ind-insight-grid">{"".join(cards)}</div>',
         unsafe_allow_html=True
     )
 
@@ -431,31 +451,13 @@ def _mapear_cenarios(df):
 
     return mapa
 
-
-def _gerar_insights(
-    df_ano,
-    df_anterior=None,
-    cenario_selecionado=None
-):
+def _gerar_insights(df_ano, df_anterior=None, cenario_selecionado=None):
     if df_ano.empty:
         st.info("Não há dados disponíveis para gerar insights.")
         return
 
-    leituras = leituras_desempenho(df_ano, df_anterior, cenario_selecionado)
-
-    col1, col2 = st.columns(2)
-
-    with col1:
-        for titulo, texto in leituras["esquerda"]:
-            _insight(titulo, texto)
-
-    with col2:
-        for titulo, texto in leituras["direita"]:
-            _insight(titulo, texto)
-
-    for titulo, texto in leituras["abaixo"]:
-        _insight(titulo, texto)
-
+    l = leituras_desempenho(df_ano, df_anterior, cenario_selecionado)
+    _grade_insights(l["esquerda"], l["direita"], l["abaixo"])
 
 def leituras_desempenho(df_ano, df_anterior=None, cenario_selecionado=None):
     """Leituras automáticas de desempenho (usadas pela tela e pelo relatório em PDF).
@@ -670,7 +672,6 @@ def _valor_central(df, coluna):
 
     return float(valores.median()) if not valores.empty else None
 
-
 def _gerar_insights_novos(df_ano, cenario_selecionado):
     esquerda, direita = leituras_estrutura(df_ano, cenario_selecionado)
 
@@ -681,15 +682,7 @@ def _gerar_insights_novos(df_ano, cenario_selecionado):
         )
         return
 
-    col1, col2 = st.columns(2)
-
-    with col1:
-        for titulo, texto in esquerda:
-            _insight(titulo, texto)
-
-    with col2:
-        for titulo, texto in direita:
-            _insight(titulo, texto)
+    _grade_insights(esquerda, direita)
 
 
 def leituras_estrutura(df_ano, cenario_selecionado):
