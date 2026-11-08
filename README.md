@@ -31,9 +31,9 @@ A plataforma também disponibiliza relatórios gerenciais e um dashboard interat
 ├── dashboard
 │
 ├── data
-│   ├── raw                      # base original (Demonstrativo Fecap v3.csv)
-│   ├── staging                  # base normalizada e resumo estatístico
-│   └── processed                # base final com dicionário de dados
+│   ├── raw                      
+│   ├── staging                  
+│   └── processed                
 │
 ├── documentos
 │   └── entrega 1
@@ -108,7 +108,6 @@ Execute os notebooks da pasta `notebooks` **nesta ordem**, pois cada um usa arqu
 
 > ⚠️ Os notebooks usam caminhos relativos (ex.: `../data/raw/...`), então devem ser executados de dentro da pasta `notebooks`, sem mover os arquivos de lugar.
 
-**Notebook de Análise Descritiva** (`documentos/entrega 1/análise inferencial de dados/Entrega1_Analise_Descritiva.ipynb`): esse notebook lê o arquivo `Demonstrativo_Normalizado.csv`, que deve estar na mesma pasta do notebook antes de dar **Run All**.
 
 ## 📋 Licença/License
 <a href="https://github.com/2026-2-NCC4/Projeto1.git">Atlas - CTI Analytics </a> © 2026 by <a href="https://github.com/2026-2-NCC4/Projeto1.git">Mariana Almeida, Julia Godinho, Rafaela Florêncio Morais</a> is licensed under <a href="https://creativecommons.org/licenses/by/4.0/">Creative Commons Attribution 4.0 International</a>
