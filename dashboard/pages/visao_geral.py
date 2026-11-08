@@ -1118,16 +1118,12 @@ def _render_conteudo():
     como_interpretar(
         "vg",
         [
-            "**Cards:** mostram o valor do ano e cenário escolhidos. Com "
-            "\"Todos os cenários\", é a média dos cenários.",
             "**Seta e variação:** comparam com o ano anterior. A cor indica só "
             "a direção da mudança, não se ela é boa ou ruim.",
             "**Rentabilidade, caixa e capital de giro:** ROE é o retorno ao "
             "acionista; FCO e FCL mostram o caixa gerado antes e depois dos "
             "investimentos; o ciclo financeiro mostra quantos dias o caixa fica "
             "preso entre pagar e receber.",
-            "**Valores abreviados:** mil, mi e bi significam milhares, milhões e "
-            "bilhões de reais. Nos gráficos, a unidade aparece no eixo.",
             "**Gráficos de evolução:** mostram a média dos cenários por ano ou o "
             "cenário escolhido. Linhas que começam no Ano 2 usam o ano anterior.",
             "**N/D:** indicadores que usam o ano anterior não existem no Ano 1.",
