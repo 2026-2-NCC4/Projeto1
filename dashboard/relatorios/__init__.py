@@ -60,7 +60,17 @@ def _tendencia(estado):
 
     indicador = estado.get("tend_indicador") or list(INDICADORES)[1]
     anos = _anos_demonstrativo()
-    periodo = tuple(estado.get("tend_periodo") or (anos[0], anos[-1]))
+    # Mesma regra da tela: se o período não for um par (início, fim) válido,
+    # usa todos os anos
+    periodo = estado.get("tend_periodo")
+    if (
+        not isinstance(periodo, (tuple, list))
+        or len(periodo) != 2
+        or periodo[0] not in anos
+        or periodo[1] not in anos
+    ):
+        periodo = (anos[0], anos[-1])
+    periodo = tuple(int(a) for a in periodo)
     cenario = estado.get("tend_cenario") or _primeiro_cenario()
     secundario = estado.get("tend_secundario") or "Nenhum"
     return (

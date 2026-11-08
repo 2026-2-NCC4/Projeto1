@@ -2,6 +2,28 @@ from pathlib import Path
 
 import streamlit as st
 
+from dependencias import COMANDO, faltando
+
+# Antes de importar as páginas: se faltar alguma biblioteca, explica como
+# instalar em vez de quebrar com "No module named ..."
+_ausentes = faltando()
+if _ausentes:
+    st.set_page_config(page_title="CTI | Instalação incompleta", layout="centered")
+    st.error(
+        "Faltam bibliotecas para rodar o painel: **" + ", ".join(_ausentes) + "**.",
+        icon=":material/extension_off:",
+    )
+    st.markdown(
+        "Feche o app (**Ctrl+C** no terminal), rode o comando abaixo **de dentro da "
+        "pasta `dashboard`** e abra o app de novo:"
+    )
+    st.code(COMANDO, language="bash")
+    st.caption(
+        "A lista completa está no arquivo requirements.txt. Se o comando “py” não "
+        "existir no seu computador, troque por “python”."
+    )
+    st.stop()
+
 from components.auth import aplicar_cookie_pendente, render_auth_page, usuario_logado
 from components.sidebar import render_sidebar
 from components.header import render_header

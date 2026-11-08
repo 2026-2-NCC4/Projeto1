@@ -108,6 +108,25 @@ Execute os notebooks da pasta `notebooks` **nesta ordem**, pois cada um usa arqu
 
 > ⚠️ Os notebooks usam caminhos relativos (ex.: `../data/raw/...`), então devem ser executados de dentro da pasta `notebooks`, sem mover os arquivos de lugar.
 
+### 4. Executar o dashboard
+
+As bibliotecas do dashboard estão listadas em `dashboard/requirements.txt`. De dentro da pasta `dashboard`, instale tudo de uma vez (só na primeira vez ou quando a lista mudar):
+
+```sh
+cd dashboard
+py -m pip install -r requirements.txt
+```
+
+Depois, rode o painel (sempre de dentro da pasta `dashboard`):
+
+```sh
+py -m streamlit run main.py
+```
+
+> 💡 Se o comando `py` não existir no seu computador, troque por `python`. Se faltar alguma biblioteca, o próprio painel avisa qual é e mostra o comando de instalação. Para conferir sem abrir o app, rode `py dependencias.py`.
+
+> ⚠️ Ao instalar uma biblioteca nova no projeto, acrescente o nome dela ao `requirements.txt` à mão. Não gere o arquivo com `pip freeze`: ele lista tudo o que existe no seu Python (Jupyter etc.) e trava versões que podem não existir no computador dos colegas.
+
 
 ## 📋 Licença/License
 <a href="https://github.com/2026-2-NCC4/Projeto1.git">Atlas - CTI Analytics </a> © 2026 by <a href="https://github.com/2026-2-NCC4/Projeto1.git">Mariana Almeida, Julia Godinho, Rafaela Florêncio Morais</a> is licensed under <a href="https://creativecommons.org/licenses/by/4.0/">Creative Commons Attribution 4.0 International</a>
