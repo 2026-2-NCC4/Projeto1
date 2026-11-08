@@ -1,6 +1,7 @@
 import unicodedata
 import streamlit as st
 from components.auth import usuario_logado
+from relatorios import RELATORIOS, relatorio_da_pagina
 
 
 BUSCA_POR_PAGINA = {
@@ -239,11 +240,22 @@ def render_header(pagina_atual=None):
     pagina = pagina_atual or st.session_state.get("pagina_atual", "Visão Geral")
 
     with st.container(key="cti_topbar"):
-        busca, ajuda, perfil = st.columns(
-            [1, 1, 1],
+        busca, relatorio, ajuda, perfil = st.columns(
+            [1, 1, 1, 1],
             vertical_alignment="center",
             gap="small",
         )
+
+        with relatorio:
+            if st.button(
+                "",
+                icon=":material/picture_as_pdf:",
+                key="cti_header_relatorio",
+                help="Relatório desta página em PDF",
+            ):
+                st.session_state["cti_relatorio_aberto"] = not st.session_state.get(
+                    "cti_relatorio_aberto", False
+                )
 
         with busca:
             st.text_input(
@@ -292,4 +304,49 @@ def render_header(pagina_atual=None):
                     args=("Ajuda",),
                 )
 
+    if st.session_state.get("cti_relatorio_aberto", False):
+        _caixa_relatorio(pagina)
+
     _resultados_busca(pagina)
+
+
+def _caixa_relatorio(pagina):
+    """Gera o PDF da página aberta, com os filtros escolhidos, e oferece o download."""
+    with st.container(key="cti_relatorio_box"):
+        relatorio = relatorio_da_pagina(pagina, st.session_state)
+
+        if relatorio is None:
+            disponiveis = ", ".join(RELATORIOS)
+            st.info(
+                f"O relatório em PDF da página {pagina} ainda está em preparação. "
+                f"Já disponíveis: {disponiveis}.",
+                icon=":material/picture_as_pdf:",
+            )
+            return
+
+        nome_arquivo, recorte, gerar = relatorio
+
+        try:
+            with st.spinner("Gerando o relatório…"):
+                pdf = gerar()
+        except Exception as erro:
+            st.error(f"Não foi possível gerar o relatório: {erro}")
+            return
+
+        texto, botao = st.columns([3, 1], vertical_alignment="center")
+        with texto:
+            st.markdown(
+                f"**Relatório interpretativo: {pagina}**  \n"
+                f"Recorte: {recorte}. O PDF usa os filtros escolhidos nesta página."
+            )
+        with botao:
+            st.download_button(
+                "Baixar PDF",
+                data=pdf,
+                file_name=nome_arquivo,
+                mime="application/pdf",
+                icon=":material/download:",
+                key="cti_relatorio_baixar",
+                type="primary",
+                use_container_width=True,
+            )

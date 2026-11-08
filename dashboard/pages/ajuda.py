@@ -71,6 +71,10 @@ PERGUNTAS = [
     ("Como mudo a página que abre quando entro?",
      "Em Configurações, no card Preferências, escolha a página inicial. Ela vale a partir do "
      "próximo acesso."),
+    ("Como baixo um relatório em PDF?",
+     "Escolha os filtros na página e clique no ícone de PDF no topo da tela, ao lado da busca. "
+     "O relatório traz os números da página, gráficos e uma leitura interpretativa do recorte "
+     "escolhido."),
 ]
 
 PAGE_STYLE = """

@@ -570,6 +570,7 @@ body:has(.cti-collapsed-marker) [data-testid="stSidebar"] .st-key-cti_nav_simula
 
 /* Ajuda e resultados da busca: mesmo recuo do conteúdo das páginas */
 .st-key-cti_ajuda_box,
+.st-key-cti_relatorio_box,
 .st-key-cti_busca_resultados {
     padding: 18px 32px 0;
     gap: 8px !important;

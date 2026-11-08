@@ -387,6 +387,109 @@ def formatar_numero(valor):
     return f"{valor:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
 
 
+# ---------- Cálculos (usados pela tela e pelo relatório em PDF) ----------
+
+TODOS_OS_CENARIOS = "Todos os cenários"
+
+
+def mapa_cenarios(df):
+    """Nome original do cenário na base -> nome exibido ("Cenário 1", ...)."""
+    cenarios = sorted(df["Cenario"].dropna().astype(str).unique().tolist())
+    return {original: f"Cenário {i + 1}" for i, original in enumerate(cenarios)}
+
+
+def dados_do_recorte(df, ano, cenario):
+    """Linhas do ano e do cenário (nome original) escolhidos."""
+    dados = df[df["Ano_Numero"] == ano]
+    if cenario != TODOS_OS_CENARIOS:
+        dados = dados[dados["Cenario"].astype(str) == cenario]
+    return dados
+
+
+def valor_indicador(df, ano, cenario, coluna):
+    """Média dos cenários (ou o valor do cenário escolhido) no ano."""
+    dados = dados_do_recorte(df, ano, cenario)
+
+    if coluna not in dados.columns:
+        return float("nan")
+
+    valores = pd.to_numeric(dados[coluna], errors="coerce").dropna()
+
+    if valores.empty:
+        return float("nan")
+
+    if cenario == TODOS_OS_CENARIOS:
+        return valores.mean()
+
+    return valores.iloc[0]
+
+
+def variacao_anual(df, ano, cenario, coluna, formato="numero"):
+    """Comparação com o ano anterior: {"classe": ..., "texto": ...}."""
+    anos = sorted(df["Ano_Numero"].dropna().unique().astype(int).tolist())
+    anos_anteriores = [a for a in anos if a < ano]
+    if not anos_anteriores or coluna not in df.columns:
+        return {"classe": "neutral", "texto": "— sem ano anterior"}
+
+    atual = valor_indicador(df, ano, cenario, coluna)
+    anterior = valor_indicador(df, max(anos_anteriores), cenario, coluna)
+
+    if pd.isna(atual) or pd.isna(anterior):
+        return {"classe": "neutral", "texto": "— dados insuficientes para comparar"}
+    diferenca = float(atual) - float(anterior)
+    if formato == "percentual":
+        # a vírgula decimal só no número, para não virar "p,p,"
+        numero = f"{abs(diferenca) * 100:.2f}".replace(".", ",") + " p.p."
+    elif abs(float(anterior)) > 1e-12:
+        percentual = abs(diferenca / abs(float(anterior))) * 100
+        numero = f"{percentual:.1f}%".replace(".", ",")
+    elif formato == "moeda":
+        numero = formatar_moeda(abs(diferenca))
+    else:
+        numero = f"{abs(diferenca):.2f}".replace(".", ",")
+    sufixo = " vs. ano anterior"
+
+    if abs(diferenca) < 1e-12:
+        return {"classe": "neutral", "texto": "• Estável vs. ano anterior"}
+    subiu = diferenca > 0
+    seta = "↑" if subiu else "↓"
+
+    classe = "positive" if subiu else "negative"
+    return {"classe": classe, "texto": f"{seta} {numero}{sufixo}"}
+
+
+def ultimo_ano_disponivel(df, coluna):
+    if coluna not in df.columns:
+        return None
+
+    validos = df.loc[df[coluna].notna(), "Ano_Numero"]
+    return int(validos.max()) if not validos.empty else None
+
+
+def avisos_de_qualidade(df, ano, cenario):
+    """Indicadores sem valor no recorte e alertas sobre os dados."""
+    indicadores_com_ano = ["ROIC", "EVA", "Capital Investido", "MVA Aproximado"]
+    ausentes = []
+
+    for coluna in indicadores_com_ano:
+        if coluna in df.columns and pd.isna(valor_indicador(df, ano, cenario, coluna)):
+            ultimo = ultimo_ano_disponivel(df, coluna)
+            if ultimo is None:
+                ausentes.append(f"{coluna}: sem valores disponíveis na base.")
+            else:
+                ausentes.append(
+                    f"{coluna}: sem valor no Ano {ano}; "
+                    f"último ano disponível na base: Ano {ultimo}."
+                )
+
+    margem_acima_de_100 = False
+    margem_ebitda = valor_indicador(df, ano, cenario, "Margem EBITDA")
+    if pd.notna(margem_ebitda) and margem_ebitda > 1:
+        margem_acima_de_100 = True
+
+    return ausentes, margem_acima_de_100
+
+
 def _kpi(key, rotulo, valor, variacao, explicacao):
     valor = valor.replace("R$ ", "R$&nbsp;")
     rotulo_seguro = escape(rotulo)
@@ -463,8 +566,8 @@ def _render_conteudo():
     cenarios = sorted(df["Cenario"].dropna().astype(str).unique().tolist())
 
 
-    mapa_cenarios = {original: f"Cenário {i + 1}" for i, original in enumerate(cenarios)}
-    mapa_cenarios_inverso = {nome_exibicao: original for original, nome_exibicao in mapa_cenarios.items()}
+    nomes_cenarios = mapa_cenarios(df)
+    mapa_cenarios_inverso = {nome_exibicao: original for original, nome_exibicao in nomes_cenarios.items()}
 
     if not anos or not cenarios:
         st.warning("Não há anos ou cenários disponíveis para selecionar.")
@@ -476,7 +579,7 @@ def _render_conteudo():
     saudacao = f"Olá, {primeiro_nome}! 👋" if primeiro_nome else "Olá! 👋"
 
 
-    opcoes_cenario = ["Todos os cenários"] + list(mapa_cenarios.values())
+    opcoes_cenario = ["Todos os cenários"] + list(nomes_cenarios.values())
     indice_cenario = 0
 
     with st.container(key="vg_topo"):
@@ -566,74 +669,15 @@ def _render_conteudo():
     )
 
 
+    # Os cálculos ficam em funções de módulo, compartilhadas com o relatório em PDF
     def obter_valor(coluna):
-
-        if coluna not in dados_ano.columns:
-
-            return float("nan")
-
-        valores = pd.to_numeric(dados_ano[coluna], errors="coerce").dropna()
-
-        if valores.empty:
-
-            return float("nan")
-
-        if cenario_selecionado == "Todos os cenários":
-
-            return valores.mean()
-
-        return valores.iloc[0]
+        return valor_indicador(df, ano_selecionado, cenario_selecionado, coluna)
 
     def obter_variacao_anual(coluna, explicacao, formato="numero", maior_eh_melhor=True):
-        anos_anteriores = [a for a in anos if a < ano_selecionado]
-        if not anos_anteriores or coluna not in df.columns:
-            return {"classe": "neutral", "texto": "— sem ano anterior"}
-
-        ano_anterior = max(anos_anteriores)
-        anterior_df = df[df["Ano_Numero"] == ano_anterior].copy()
-        if cenario_selecionado != "Todos os cenários":
-            anterior_df = anterior_df[anterior_df["Cenario"].astype(str) == cenario_selecionado]
-        atual = obter_valor(coluna)
-        anteriores = pd.to_numeric(anterior_df[coluna], errors="coerce").dropna()
-        anterior = anteriores.mean() if cenario_selecionado == "Todos os cenários" and not anteriores.empty else (anteriores.iloc[0] if not anteriores.empty else float("nan"))
-
-        if pd.isna(atual) or pd.isna(anterior):
-            return {"classe": "neutral", "texto": "— dados insuficientes para comparar"}
-        diferenca = float(atual) - float(anterior)
-        if formato == "percentual":
-            numero = f"{abs(diferenca) * 100:.2f} p.p.".replace(".", ",")
-        elif abs(float(anterior)) > 1e-12:
-            percentual = abs(diferenca / abs(float(anterior))) * 100
-            numero = f"{percentual:.1f}%".replace(".", ",")
-        elif formato == "moeda":
-            numero = formatar_moeda(abs(diferenca))
-        else:
-            numero = f"{abs(diferenca):.2f}".replace(".", ",")
-        sufixo = " vs. ano anterior"
-
-        if abs(diferenca) < 1e-12:
-            return {"classe": "neutral", "texto": "• Estável vs. ano anterior"}
-        subiu = diferenca > 0
-        seta = "↑" if subiu else "↓"
-
-        classe = "positive" if subiu else "negative"
-        return {"classe": classe, "texto": f"{seta} {numero}{sufixo}"}
+        return variacao_anual(df, ano_selecionado, cenario_selecionado, coluna, formato)
 
     def obter_ultimo_ano_disponivel(coluna):
-
-        if coluna not in df.columns:
-
-            return None
-
-        validos = df.loc[
-
-            df[coluna].notna(),
-
-            "Ano_Numero",
-
-        ]
-
-        return int(validos.max()) if not validos.empty else None
+        return ultimo_ano_disponivel(df, coluna)
 
 
     _titulo_secao("Desempenho financeiro")

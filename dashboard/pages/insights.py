@@ -231,6 +231,136 @@ def _maior_sensibilidade(dados_ano):
     return driver, impactos[driver]
 
 
+def cenario_padrao(df):
+    """Na primeira visita, destaca o cenário com mais caixa no último ano."""
+    ultimo_ano = df[df["Ano"] == df["Ano"].max()]
+    return int(ultimo_ano.loc[ultimo_ano[CAIXA].idxmax(), "Cenario"])
+
+
+def calcular_insights(df, ano, cenario):
+    """Os 4 cartões e a conclusão (usado pela tela e pelo relatório em PDF).
+
+    Cada cartão: {"valor", "titulo", "texto", "acao"}.
+    """
+    dados_ano = df[df["Ano"] == ano]
+
+    caixa, caixa_media, posicao_caixa, total = _caixa_do_cenario(dados_ano, cenario)
+    crescimento, posicao_cresc = _crescimento_receita(df, ano)
+    margem, cenario_margem, margem_media = _melhor_margem(dados_ano)
+    driver, impacto = _maior_sensibilidade(dados_ano)
+
+    def card(valor, titulo, texto, acao):
+        return {"valor": valor, "titulo": titulo, "texto": texto, "acao": acao}
+
+    cards = []
+
+    # 01. Caixa do cenário escolhido
+    if np.isnan(caixa):
+        cards.append(card("N/D", "Caixa em destaque",
+                          f"Cenário {cenario} sem geração de caixa no Ano {ano}.",
+                          "Escolha outro cenário"))
+    else:
+        diferenca = caixa - caixa_media
+        comparacao = "acima" if diferenca >= 0 else "abaixo"
+        topo = posicao_caixa <= max(1, total // 10)
+        cards.append(card(
+            _moeda_mi(caixa),
+            "Caixa em destaque",
+            f"O Cenário {cenario} gera {_moeda_mi(abs(diferenca))} {comparacao} "
+            f"da média dos cenários e ocupa a posição {_num(posicao_caixa, 0)} "
+            f"de {_num(total, 0)} no Ano {ano}.",
+            "Use-o como referência para o planejamento" if topo
+            else "Compare com os cenários de maior caixa",
+        ))
+
+    # 02. Crescimento da receita média
+    if crescimento is None:
+        cards.append(card("N/D", "Receita",
+                          f"O Ano {ano} é o primeiro da série; não há ano anterior para comparar.",
+                          "Selecione um ano posterior"))
+    else:
+        if posicao_cresc == 1:
+            destaque = "o maior crescimento anual da série"
+        else:
+            destaque = f"o {posicao_cresc}º maior crescimento anual da série"
+
+        cards.append(card(
+            _pct(crescimento, sinal=True),
+            "Receita acelera" if crescimento > 0 else "Receita recua",
+            f"A receita média do Ano {ano} varia {_pct(crescimento, sinal=True)} "
+            f"sobre o Ano {ano - 1}, {destaque}.",
+            "Proteja a capacidade operacional para sustentar o ritmo"
+            if crescimento > 0
+            else "Investigue as causas da queda de receita",
+        ))
+
+    # 03. Melhor margem EBITDA do ano
+    if margem is None:
+        cards.append(card("N/D", "Melhor margem",
+                          f"Sem receita positiva no Ano {ano} para calcular a margem.",
+                          "Revise os dados do ano"))
+    else:
+        cards.append(card(
+            _pct(margem),
+            "Melhor margem",
+            f"O Cenário {cenario_margem} tem a maior margem EBITDA do Ano {ano}; "
+            f"a média dos cenários é {_pct(margem_media)}.",
+            "Priorize o mix de maior contribuição",
+        ))
+
+    # 04. Variável com maior impacto no Resultado Líquido
+    if driver is None:
+        cards.append(card("N/D", "Maior sensibilidade",
+                          "Não há dados suficientes para medir a sensibilidade neste ano.",
+                          "Selecione outro ano"))
+    else:
+        cards.append(card(
+            driver,
+            "Maior sensibilidade",
+            f"Uma variação de {VARIACAO_SENSIBILIDADE:.0%} em {driver} muda o "
+            f"Resultado Líquido em cerca de {_moeda_mi(impacto)}.",
+            f"Monitore {driver} de perto nas simulações",
+        ))
+
+    # Conclusão: junta os sinais dos cartões
+    cresce = crescimento is not None and crescimento > 0
+    caixa_acima = not np.isnan(caixa) and caixa >= caixa_media
+
+    if cresce and caixa_acima:
+        titulo = "Crescimento com qualidade e caixa"
+    elif cresce:
+        titulo = "Crescimento que pede atenção ao caixa"
+    elif caixa_acima:
+        titulo = "Caixa sólido em um ano de receita fraca"
+    else:
+        titulo = "Momento de proteger resultado e caixa"
+
+    linhas = []
+    if crescimento is not None:
+        linhas.append(
+            f"No Ano {ano}, a receita média "
+            f"{'cresce' if crescimento > 0 else 'recua'} {_pct(abs(crescimento))}"
+            + (f" e a margem EBITDA média é de {_pct(margem_media)}." if margem else ".")
+        )
+    elif margem:
+        linhas.append(f"No Ano {ano}, a margem EBITDA média é de {_pct(margem_media)}.")
+
+    if not np.isnan(caixa):
+        linhas.append(
+            f"O Cenário {cenario} gera {'mais' if caixa_acima else 'menos'} caixa "
+            "que a média e serve de "
+            f"{'referência de retorno' if caixa_acima else 'alerta para o planejamento'}."
+        )
+
+    if driver:
+        linhas.append(
+            f"O foco recomendado é {driver}: é a variável que mais move o "
+            "Resultado Líquido, então protegê-la protege o lucro."
+        )
+
+    return {"cards": cards, "conclusao_titulo": titulo, "conclusao": linhas}
+
+
 def _topo(anos, cenarios, cenario_padrao):
     with st.container(key="ins_topo"):
         titulo, col_ano, col_cenario, col_botao = st.columns(
@@ -318,132 +448,15 @@ def render_insights():
             return
 
 
-        ultimo_ano = df[df["Ano"] == anos[-1]]
-        cenario_padrao = int(ultimo_ano.loc[ultimo_ano[CAIXA].idxmax(), "Cenario"])
+        ano, cenario = _topo(anos, cenarios, cenario_padrao(df))
+        resultado = calcular_insights(df, ano, cenario)
 
-        ano, cenario = _topo(anos, cenarios, cenario_padrao)
-        dados_ano = df[df["Ano"] == ano]
+        colunas = st.columns(4, gap="small")
+        for numero, (coluna, card) in enumerate(zip(colunas, resultado["cards"]), start=1):
+            with coluna:
+                _card(numero, card["valor"], card["titulo"], card["texto"], card["acao"])
 
-        caixa, caixa_media, posicao_caixa, total = _caixa_do_cenario(dados_ano, cenario)
-        crescimento, posicao_cresc = _crescimento_receita(df, ano)
-        margem, cenario_margem, margem_media = _melhor_margem(dados_ano)
-        driver, impacto = _maior_sensibilidade(dados_ano)
-
-        col1, col2, col3, col4 = st.columns(4, gap="small")
-
-
-        with col1:
-            if np.isnan(caixa):
-                _card(1, "N/D", "Caixa em destaque",
-                      f"Cenário {cenario} sem geração de caixa no Ano {ano}.",
-                      "Escolha outro cenário")
-            else:
-                diferenca = caixa - caixa_media
-                comparacao = "acima" if diferenca >= 0 else "abaixo"
-                topo = posicao_caixa <= max(1, total // 10)
-                _card(
-                    1,
-                    _moeda_mi(caixa),
-                    "Caixa em destaque",
-                    f"O Cenário {cenario} gera {_moeda_mi(abs(diferenca))} {comparacao} "
-                    f"da média dos cenários e ocupa a posição {_num(posicao_caixa, 0)} "
-                    f"de {_num(total, 0)} no Ano {ano}.",
-                    "Use-o como referência para o planejamento" if topo
-                    else "Compare com os cenários de maior caixa",
-                )
-
-
-        with col2:
-            if crescimento is None:
-                _card(2, "N/D", "Receita",
-                      f"O Ano {ano} é o primeiro da série; não há ano anterior para comparar.",
-                      "Selecione um ano posterior")
-            else:
-                if posicao_cresc == 1:
-                    destaque = "o maior crescimento anual da série"
-                else:
-                    destaque = f"o {posicao_cresc}º maior crescimento anual da série"
-
-                _card(
-                    2,
-                    _pct(crescimento, sinal=True),
-                    "Receita acelera" if crescimento > 0 else "Receita recua",
-                    f"A receita média do Ano {ano} varia {_pct(crescimento, sinal=True)} "
-                    f"sobre o Ano {ano - 1}, {destaque}.",
-                    "Proteja a capacidade operacional para sustentar o ritmo"
-                    if crescimento > 0
-                    else "Investigue as causas da queda de receita",
-                )
-
-
-        with col3:
-            if margem is None:
-                _card(3, "N/D", "Melhor margem",
-                      f"Sem receita positiva no Ano {ano} para calcular a margem.",
-                      "Revise os dados do ano")
-            else:
-                _card(
-                    3,
-                    _pct(margem),
-                    "Melhor margem",
-                    f"O Cenário {cenario_margem} tem a maior margem EBITDA do Ano {ano}; "
-                    f"a média dos cenários é {_pct(margem_media)}.",
-                    "Priorize o mix de maior contribuição",
-                )
-
-
-        with col4:
-            if driver is None:
-                _card(4, "N/D", "Maior sensibilidade",
-                      "Não há dados suficientes para medir a sensibilidade neste ano.",
-                      "Selecione outro ano")
-            else:
-                _card(
-                    4,
-                    driver,
-                    "Maior sensibilidade",
-                    f"Uma variação de {VARIACAO_SENSIBILIDADE:.0%} em {driver} muda o "
-                    f"Resultado Líquido em cerca de {_moeda_mi(impacto)}.",
-                    f"Monitore {driver} de perto nas simulações",
-                )
-
-
-        cresce = crescimento is not None and crescimento > 0
-        caixa_acima = not np.isnan(caixa) and caixa >= caixa_media
-
-        if cresce and caixa_acima:
-            titulo = "Crescimento com qualidade e caixa"
-        elif cresce:
-            titulo = "Crescimento que pede atenção ao caixa"
-        elif caixa_acima:
-            titulo = "Caixa sólido em um ano de receita fraca"
-        else:
-            titulo = "Momento de proteger resultado e caixa"
-
-        linhas = []
-        if crescimento is not None:
-            linhas.append(
-                f"No Ano {ano}, a receita média "
-                f"{'cresce' if crescimento > 0 else 'recua'} {_pct(abs(crescimento))}"
-                + (f" e a margem EBITDA média é de {_pct(margem_media)}." if margem else ".")
-            )
-        elif margem:
-            linhas.append(f"No Ano {ano}, a margem EBITDA média é de {_pct(margem_media)}.")
-
-        if not np.isnan(caixa):
-            linhas.append(
-                f"O Cenário {cenario} gera {'mais' if caixa_acima else 'menos'} caixa "
-                "que a média e serve de "
-                f"{'referência de retorno' if caixa_acima else 'alerta para o planejamento'}."
-            )
-
-        if driver:
-            linhas.append(
-                f"O foco recomendado é {driver}: é a variável que mais move o "
-                "Resultado Líquido, então protegê-la protege o lucro."
-            )
-
-        _pitch(titulo, linhas)
+        _pitch(resultado["conclusao_titulo"], resultado["conclusao"])
 
         como_interpretar(
             "ins",
