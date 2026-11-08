@@ -441,6 +441,29 @@ def _gerar_insights(
         st.info("Não há dados disponíveis para gerar insights.")
         return
 
+    leituras = leituras_desempenho(df_ano, df_anterior, cenario_selecionado)
+
+    col1, col2 = st.columns(2)
+
+    with col1:
+        for titulo, texto in leituras["esquerda"]:
+            _insight(titulo, texto)
+
+    with col2:
+        for titulo, texto in leituras["direita"]:
+            _insight(titulo, texto)
+
+    for titulo, texto in leituras["abaixo"]:
+        _insight(titulo, texto)
+
+
+def leituras_desempenho(df_ano, df_anterior=None, cenario_selecionado=None):
+    """Leituras automáticas de desempenho (usadas pela tela e pelo relatório em PDF).
+
+    Devolve {"esquerda", "direita", "abaixo"}: listas de (título, texto).
+    """
+    esquerda, direita, abaixo = [], [], []
+
     if cenario_selecionado == "Todos":
         contexto = "considerando todos os cenários"
     else:
@@ -477,53 +500,49 @@ def _gerar_insights(
     )
 
 
-    col1, col2 = st.columns(2)
+    if ebitda is not None and pd.notna(ebitda):
+        esquerda.append((
+            "Resultado operacional",
+            f"A média do EBITDA foi de {_moeda(ebitda)} {contexto}."
+        ))
 
-    with col1:
-        if ebitda is not None and pd.notna(ebitda):
-            _insight(
-                "Resultado operacional",
-                f"A média do EBITDA foi de {_moeda(ebitda)} {contexto}."
+    if margem is not None and pd.notna(margem):
+        esquerda.append((
+            "Margem EBITDA",
+            f"A margem EBITDA média foi de "
+            f"{_percentual(margem, df_ano['Margem EBITDA'])}, "
+            "indicando a participação do resultado operacional "
+            "em relação à receita."
+        ))
+
+    if margem_liquida is not None and pd.notna(margem_liquida):
+        direita.append((
+            "Margem líquida",
+            f"A margem líquida média foi de "
+            f"{_percentual(margem_liquida, df_ano['Margem Líquida'])}."
+        ))
+
+    if lc is not None and pd.notna(lc):
+        if lc > 1:
+            interpretacao = (
+                "a média está acima de 1, indicando maior cobertura "
+                "das obrigações de curto prazo pelos ativos circulantes."
+            )
+        elif lc < 1:
+            interpretacao = (
+                "a média está abaixo de 1, indicando que os ativos "
+                "circulantes são inferiores às obrigações de curto prazo."
+            )
+        else:
+            interpretacao = (
+                "a média está em 1, indicando equilíbrio entre "
+                "ativos e obrigações de curto prazo."
             )
 
-        if margem is not None and pd.notna(margem):
-            _insight(
-                "Margem EBITDA",
-                f"A margem EBITDA média foi de "
-                f"{_percentual(margem, df_ano['Margem EBITDA'])}, "
-                "indicando a participação do resultado operacional "
-                "em relação à receita."
-            )
-
-    with col2:
-        if margem_liquida is not None and pd.notna(margem_liquida):
-            _insight(
-                "Margem líquida",
-                f"A margem líquida média foi de "
-                f"{_percentual(margem_liquida, df_ano['Margem Líquida'])}."
-            )
-
-        if lc is not None and pd.notna(lc):
-            if lc > 1:
-                interpretacao = (
-                    "a média está acima de 1, indicando maior cobertura "
-                    "das obrigações de curto prazo pelos ativos circulantes."
-                )
-            elif lc < 1:
-                interpretacao = (
-                    "a média está abaixo de 1, indicando que os ativos "
-                    "circulantes são inferiores às obrigações de curto prazo."
-                )
-            else:
-                interpretacao = (
-                    "a média está em 1, indicando equilíbrio entre "
-                    "ativos e obrigações de curto prazo."
-                )
-
-            _insight(
-                "Liquidez corrente",
-                f"A liquidez corrente média foi de {_numero(lc)}; {interpretacao}"
-            )
+        direita.append((
+            "Liquidez corrente",
+            f"A liquidez corrente média foi de {_numero(lc)}; {interpretacao}"
+        ))
 
 
     if "ROIC" in df_ano.columns and "WACC" in df_ano.columns:
@@ -553,11 +572,11 @@ def _gerar_insights(
                     "ficou igual ao custo de capital."
                 )
 
-            _insight(
+            abaixo.append((
                 "Retorno sobre o capital x custo de capital",
                 f"{leitura} Em {proporcao:.1f}% dos registros com dados "
                 "disponíveis, o ROIC ficou acima do WACC."
-            )
+            ))
 
 
     if df_anterior is not None and not df_anterior.empty:
@@ -590,7 +609,7 @@ def _gerar_insights(
                         "ao ano anterior."
                     )
 
-                _insight("Evolução do EBITDA", texto)
+                abaixo.append(("Evolução do EBITDA", texto))
 
         if (
             "Margem EBITDA" in df_ano.columns
@@ -607,12 +626,12 @@ def _gerar_insights(
             if pd.notna(atual) and pd.notna(anterior):
                 diferenca = atual - anterior
 
-                _insight(
+                abaixo.append((
                     "Variação da margem EBITDA",
                     f"A diferença entre a margem EBITDA média do ano selecionado "
                     f"e a do ano anterior foi de {_numero(diferenca)} "
                     "ponto(s) na escala original dos dados."
-                )
+                ))
 
 
     if (
@@ -632,13 +651,15 @@ def _gerar_insights(
             pior = ranking.index[-1]
             mapa = _mapear_cenarios(df_ano)
 
-            _insight(
+            abaixo.append((
                 "Destaque entre os cenários",
                 f"{mapa.get(melhor, melhor)} apresentou o maior EBITDA médio "
                 f"({_moeda(ranking.iloc[0])}). "
                 f"{mapa.get(pior, pior)} apresentou o menor "
                 f"({_moeda(ranking.iloc[-1])})."
-            )
+            ))
+
+    return {"esquerda": esquerda, "direita": direita, "abaixo": abaixo}
 
 
 def _valor_central(df, coluna):
@@ -651,6 +672,31 @@ def _valor_central(df, coluna):
 
 
 def _gerar_insights_novos(df_ano, cenario_selecionado):
+    esquerda, direita = leituras_estrutura(df_ano, cenario_selecionado)
+
+    if not esquerda and not direita:
+        st.info(
+            "Os novos indicadores não têm valores para este recorte. "
+            "Os que usam variação ou média de dois anos começam no Ano 2."
+        )
+        return
+
+    col1, col2 = st.columns(2)
+
+    with col1:
+        for titulo, texto in esquerda:
+            _insight(titulo, texto)
+
+    with col2:
+        for titulo, texto in direita:
+            _insight(titulo, texto)
+
+
+def leituras_estrutura(df_ano, cenario_selecionado):
+    """Leituras de retorno, capital de giro e caixa (tela e relatório em PDF).
+
+    Devolve (esquerda, direita): listas de (título, texto).
+    """
     if cenario_selecionado == "Todos":
         referencia = "mediana dos cenários"
     else:
@@ -785,22 +831,7 @@ def _gerar_insights_novos(df_ano, cenario_selecionado):
             f"de caixa. {leitura}"
         ))
 
-    if not esquerda and not direita:
-        st.info(
-            "Os novos indicadores não têm valores para este recorte. "
-            "Os que usam variação ou média de dois anos começam no Ano 2."
-        )
-        return
-
-    col1, col2 = st.columns(2)
-
-    with col1:
-        for titulo, texto in esquerda:
-            _insight(titulo, texto)
-
-    with col2:
-        for titulo, texto in direita:
-            _insight(titulo, texto)
+    return esquerda, direita
 
 
 def _tabela_indicadores(df, mapa_cenarios):
@@ -945,6 +976,90 @@ def _tabela_indicadores(df, mapa_cenarios):
     )
 
 
+def preparar_indicadores(df):
+    """Garante o ano numérico e os indicadores como números."""
+    df = df.copy()
+
+    if "Ano_Numero" not in df.columns:
+        df["Ano_Numero"] = (
+            df["Ano"]
+            .astype(str)
+            .str.extract(r"(\d+)", expand=False)
+            .astype(int)
+        )
+
+    for coluna in INDICADORES:
+        if coluna in df.columns:
+            df[coluna] = pd.to_numeric(
+                df[coluna],
+                errors="coerce"
+            )
+
+    return df
+
+
+def cartoes_resumo(df_ano):
+    """Os 8 cartões do resumo do ano: (título, valor formatado, observação)."""
+    def media(coluna):
+        if coluna not in df_ano.columns:
+            return None
+
+        valores = df_ano[coluna].dropna()
+
+        return valores.mean() if not valores.empty else None
+
+    ebitda = media("EBITDA")
+    margem_ebitda = media("Margem EBITDA")
+    margem_liquida = media("Margem Líquida")
+    roic = media("ROIC")
+    roe = media("ROE")
+    fcl = media("FCL")
+    conversao = media("FCO / EBITDA")
+    ciclo = media("Ciclo Financeiro")
+
+    return [
+        ("EBITDA médio",
+         _moeda(ebitda) if ebitda is not None else "—",
+         "Resultado operacional"),
+        ("Margem EBITDA",
+         _percentual(margem_ebitda, df_ano["Margem EBITDA"])
+         if margem_ebitda is not None else "—",
+         "Rentabilidade operacional"),
+        ("Margem líquida",
+         _percentual(margem_liquida, df_ano["Margem Líquida"])
+         if margem_liquida is not None else "—",
+         "Rentabilidade líquida"),
+        ("ROIC médio",
+         _percentual(roic, df_ano["ROIC"]) if roic is not None else "—",
+         "Retorno sobre o capital investido"),
+        ("ROE médio",
+         _percentual(roe) if roe is not None else "—",
+         "Retorno sobre o patrimônio líquido"),
+        ("FCL médio",
+         _moeda(fcl) if fcl is not None else "—",
+         "Caixa livre após investimentos"),
+        ("Conversão de caixa",
+         _percentual(conversao) if conversao is not None else "—",
+         "FCO em relação ao EBITDA"),
+        ("Ciclo financeiro",
+         f"{_numero(ciclo, 1)} dias" if ciclo is not None else "—",
+         "Prazo de recebimento menos prazo de pagamento"),
+    ]
+
+
+def recorte_indicadores(df, ano, cenario):
+    """Linhas do ano (rótulo "Ano N") e do cenário, e as do ano anterior."""
+    df_ano = df[df["Ano"] == ano].copy()
+    if cenario != "Todos":
+        df_ano = df_ano[df_ano["Cenario"] == cenario]
+
+    df_anterior = df[df["Ano_Numero"] == _numero_ano(ano) - 1].copy()
+    if cenario != "Todos":
+        df_anterior = df_anterior[df_anterior["Cenario"] == cenario]
+
+    return df_ano, df_anterior
+
+
 def render_indicadores():
     st.markdown(PAGE_STYLE, unsafe_allow_html=True)
 
@@ -962,24 +1077,7 @@ def render_indicadores():
             st.warning("A base de indicadores está vazia.")
             return
 
-        df = df.copy()
-
-        if "Ano_Numero" not in df.columns:
-            df["Ano_Numero"] = (
-                df["Ano"]
-                .astype(str)
-                .str.extract(r"(\d+)", expand=False)
-                .astype(int)
-            )
-
-
-        for coluna in INDICADORES:
-            if coluna in df.columns:
-                df[coluna] = pd.to_numeric(
-                    df[coluna],
-                    errors="coerce"
-                )
-
+        df = preparar_indicadores(df)
 
         mapa_cenarios = _mapear_cenarios(df)
 
@@ -1035,30 +1133,11 @@ def render_indicadores():
         st.write("")
 
 
-        df_ano = df[
-            df["Ano"] == ano_selecionado
-        ].copy()
-
-        if cenario_selecionado != "Todos":
-            df_ano = df_ano[
-                df_ano["Cenario"] == cenario_selecionado
-            ]
+        df_ano, df_anterior = recorte_indicadores(df, ano_selecionado, cenario_selecionado)
 
         if df_ano.empty:
             st.warning("Não existem dados para essa seleção.")
             return
-
-
-        ano_numero = _numero_ano(ano_selecionado)
-
-        df_anterior = df[
-            df["Ano_Numero"] == ano_numero - 1
-        ].copy()
-
-        if cenario_selecionado != "Todos":
-            df_anterior = df_anterior[
-                df_anterior["Cenario"] == cenario_selecionado
-            ]
 
 
         _titulo_secao(
@@ -1066,86 +1145,10 @@ def render_indicadores():
             "Indicadores médios do recorte selecionado."
         )
 
-        def media(coluna):
-            if coluna not in df_ano.columns:
-                return None
-
-            valores = df_ano[coluna].dropna()
-
-            return valores.mean() if not valores.empty else None
-
-        ebitda = media("EBITDA")
-        margem_ebitda = media("Margem EBITDA")
-        margem_liquida = media("Margem Líquida")
-        roic = media("ROIC")
-
-        col1, col2, col3, col4 = st.columns(4)
-
-        _card(
-            col1,
-            "EBITDA médio",
-            _moeda(ebitda) if ebitda is not None else "—",
-            "Resultado operacional"
-        )
-
-        _card(
-            col2,
-            "Margem EBITDA",
-            _percentual(margem_ebitda, df_ano["Margem EBITDA"])
-            if margem_ebitda is not None else "—",
-            "Rentabilidade operacional"
-        )
-
-        _card(
-            col3,
-            "Margem líquida",
-            _percentual(margem_liquida, df_ano["Margem Líquida"])
-            if margem_liquida is not None else "—",
-            "Rentabilidade líquida"
-        )
-
-        _card(
-            col4,
-            "ROIC médio",
-            _percentual(roic, df_ano["ROIC"])
-            if roic is not None else "—",
-            "Retorno sobre o capital investido"
-        )
-
-        roe = media("ROE")
-        fcl = media("FCL")
-        conversao = media("FCO / EBITDA")
-        ciclo = media("Ciclo Financeiro")
-
-        col5, col6, col7, col8 = st.columns(4)
-
-        _card(
-            col5,
-            "ROE médio",
-            _percentual(roe) if roe is not None else "—",
-            "Retorno sobre o patrimônio líquido"
-        )
-
-        _card(
-            col6,
-            "FCL médio",
-            _moeda(fcl) if fcl is not None else "—",
-            "Caixa livre após investimentos"
-        )
-
-        _card(
-            col7,
-            "Conversão de caixa",
-            _percentual(conversao) if conversao is not None else "—",
-            "FCO em relação ao EBITDA"
-        )
-
-        _card(
-            col8,
-            "Ciclo financeiro",
-            f"{_numero(ciclo, 1)} dias" if ciclo is not None else "—",
-            "Prazo de recebimento menos prazo de pagamento"
-        )
+        cartoes = cartoes_resumo(df_ano)
+        for linha in (cartoes[:4], cartoes[4:]):
+            for coluna, (titulo, valor, observacao) in zip(st.columns(4), linha):
+                _card(coluna, titulo, valor, observacao)
 
         st.write("")
 

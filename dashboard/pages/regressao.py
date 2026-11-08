@@ -505,7 +505,51 @@ def _filtros(anos, cenarios):
     return ano, cenario
 
 
-def _resposta(ano, fatores, modelo):
+def calcular_regressao(df, ano):
+    """Ajusta o modelo do ano (usado pela tela e pelo relatório em PDF).
+
+    Devolve {"recorte", "y", "modelo", "fatores"} ou {"erro": mensagem}.
+    """
+    nomes = list(FATORES)
+    colunas = [VARIAVEIS[RESULTADO]] + [VARIAVEIS[n] for n in nomes]
+    recorte = df[df["Ano"] == ano][["Cenario"] + colunas].dropna()
+
+    if len(recorte) <= len(nomes) + 1:
+        return {"erro": "Não há cenários suficientes com dados neste ano para fazer a análise."}
+
+    # Valores em R$ mi: deixa os números legíveis e o cálculo mais estável
+    y = recorte[colunas[0]].to_numpy(dtype=float) / 1e6
+    X = recorte[colunas[1:]].to_numpy(dtype=float) / 1e6
+
+    # Proteção: um fator que não varia no ano não entra no modelo
+    mantidos, _ = remover_colineares(X, nomes)
+    if not mantidos:
+        return {"erro": "Os fatores não variam neste ano, então não há o que analisar."}
+
+    modelo = ajustar_ols(y, X[:, mantidos])
+
+    fatores = sorted(
+        (
+            {
+                "nome": nomes[i],
+                "coef": modelo["coef"][j],
+                "erro_padrao": modelo["erro_padrao"][j],
+                "p": modelo["p"][j],
+                "ic_inf": modelo["ic_inf"][j],
+                "ic_sup": modelo["ic_sup"][j],
+                "impacto": modelo["coef"][j] * VARIACAO_IMPACTO * X[:, i].mean(),
+            }
+            for j, i in enumerate(mantidos)
+        ),
+        key=lambda f: abs(f["impacto"]),
+        reverse=True,
+    )
+
+    return {"recorte": recorte, "y": y, "modelo": modelo, "fatores": fatores}
+
+
+def texto_resposta(ano, fatores, modelo):
+    """Título e texto da resposta principal da página."""
     principal = fatores[0]
     explica = _num(max(modelo["r2_ajustado"], 0) * 100, 0)
 
@@ -529,6 +573,12 @@ def _resposta(ano, fatores, modelo):
             f"Neste ano, os fatores analisados não mostram relação confiável "
             f"com a {RESULTADO}."
         )
+
+    return titulo, texto
+
+
+def _resposta(ano, fatores, modelo):
+    titulo, texto = texto_resposta(ano, fatores, modelo)
 
     # Linha única: no markdown, HTML recuado depois de linha em branco vira bloco de código
     st.markdown(
@@ -717,42 +767,13 @@ def render_regressao():
 
         ano, cenario = _filtros(anos, cenarios)
 
-        nomes = list(FATORES)
-        colunas = [VARIAVEIS[RESULTADO]] + [VARIAVEIS[n] for n in nomes]
-        recorte = df[df["Ano"] == ano][["Cenario"] + colunas].dropna()
-
-        if len(recorte) <= len(nomes) + 1:
-            st.warning("Não há cenários suficientes com dados neste ano para fazer a análise.")
+        calculo = calcular_regressao(df, ano)
+        if "erro" in calculo:
+            st.warning(calculo["erro"])
             return
 
-        # Valores em R$ mi: deixa os números legíveis e o cálculo mais estável
-        y = recorte[colunas[0]].to_numpy(dtype=float) / 1e6
-        X = recorte[colunas[1:]].to_numpy(dtype=float) / 1e6
-
-        # Proteção: um fator que não varia no ano não entra no modelo
-        mantidos, _ = remover_colineares(X, nomes)
-        if not mantidos:
-            st.warning("Os fatores não variam neste ano, então não há o que analisar.")
-            return
-
-        modelo = ajustar_ols(y, X[:, mantidos])
-
-        fatores = sorted(
-            (
-                {
-                    "nome": nomes[i],
-                    "coef": modelo["coef"][j],
-                    "erro_padrao": modelo["erro_padrao"][j],
-                    "p": modelo["p"][j],
-                    "ic_inf": modelo["ic_inf"][j],
-                    "ic_sup": modelo["ic_sup"][j],
-                    "impacto": modelo["coef"][j] * VARIACAO_IMPACTO * X[:, i].mean(),
-                }
-                for j, i in enumerate(mantidos)
-            ),
-            key=lambda f: abs(f["impacto"]),
-            reverse=True,
-        )
+        recorte, y = calculo["recorte"], calculo["y"]
+        modelo, fatores = calculo["modelo"], calculo["fatores"]
 
         _resposta(ano, fatores, modelo)
 

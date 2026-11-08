@@ -180,6 +180,43 @@ def _preparar_base(df):
     return df, colunas_base
 
 
+def indicadores_padrao(colunas_base):
+    return [nome for nome in INDICADORES_PREFERIDOS if nome in colunas_base]
+
+
+def calcular_metas(df_ano, cenario, percentil, escolhidos, colunas_base):
+    """Realizado do cenário × meta (percentil dos cenários do ano), por indicador.
+
+    Usado pela tela e pelo relatório em PDF. Devolve um DataFrame (vazio se
+    nenhum indicador puder ser calculado).
+    """
+    df_cenario = df_ano[df_ano["Cenario"] == cenario]
+    resultados = []
+
+    for nome in escolhidos:
+        coluna = colunas_base[nome]
+
+        valores = pd.to_numeric(df_ano[coluna], errors="coerce").dropna()
+        realizado = pd.to_numeric(df_cenario[coluna], errors="coerce").dropna()
+
+        if valores.empty or realizado.empty:
+            continue
+
+        meta = valores.quantile(percentil / 100)
+        valor_realizado = realizado.mean()
+        atingimento = _atingimento(valor_realizado, meta)
+
+        resultados.append({
+            "Indicador": nome,
+            "Realizado": valor_realizado,
+            "Meta analítica": meta,
+            "% Atingimento": atingimento,
+            "Status": _classificar(atingimento),
+        })
+
+    return pd.DataFrame(resultados)
+
+
 def _grafico_atingimento(resultado):
     dados = resultado.dropna(subset=["% Atingimento"]).copy()
 
@@ -298,15 +335,10 @@ def render_meta_realizado():
                     key="meta_percentil",
                 )
 
-            padrao = [
-                nome for nome in INDICADORES_PREFERIDOS
-                if nome in colunas_base
-            ]
-
             escolhidos = st.multiselect(
                 "Indicadores analisados",
                 options=list(colunas_base.keys()),
-                default=padrao,
+                default=indicadores_padrao(colunas_base),
                 key="meta_indicadores",
             )
 
@@ -314,40 +346,15 @@ def render_meta_realizado():
             st.info("Selecione pelo menos um indicador para a análise.")
             return
 
-        df_cenario = df_ano[df_ano["Cenario"] == cenario]
-
-        if df_cenario.empty:
+        if df_ano[df_ano["Cenario"] == cenario].empty:
             st.warning("Não existem dados para o cenário selecionado.")
             return
 
-        resultados = []
+        resultado = calcular_metas(df_ano, cenario, percentil, escolhidos, colunas_base)
 
-        for nome in escolhidos:
-            coluna = colunas_base[nome]
-
-            valores = pd.to_numeric(df_ano[coluna], errors="coerce").dropna()
-            realizado = pd.to_numeric(df_cenario[coluna], errors="coerce").dropna()
-
-            if valores.empty or realizado.empty:
-                continue
-
-            meta = valores.quantile(percentil / 100)
-            valor_realizado = realizado.mean()
-            atingimento = _atingimento(valor_realizado, meta)
-
-            resultados.append({
-                "Indicador": nome,
-                "Realizado": valor_realizado,
-                "Meta analítica": meta,
-                "% Atingimento": atingimento,
-                "Status": _classificar(atingimento),
-            })
-
-        if not resultados:
+        if resultado.empty:
             st.warning("Não foi possível calcular os indicadores deste cenário.")
             return
-
-        resultado = pd.DataFrame(resultados)
 
         total = len(resultado)
         atingidas = int((resultado["Status"] == "Atingida").sum())

@@ -575,13 +575,14 @@ def _cascata(simulado, ano):
         st.altair_chart(grafico, use_container_width=True)
 
 
-def _insight(premissas, original, simulado, ano):
-    ressalva = (
-        '<span class="sim-ressalva">Simulação contábil simplificada: os tributos acompanham '
-        "a receita, a alíquota efetiva de IR é mantida e os investimentos afetam só o "
-        "caixa.</span>"
-    )
+RESSALVA_SIMULACAO = (
+    "Simulação contábil simplificada: os tributos acompanham a receita, a alíquota "
+    "efetiva de IR é mantida e os investimentos afetam só o caixa."
+)
 
+
+def texto_simulacao(premissas, original, simulado, ano):
+    """Frase de conclusão e ícone (usado pela tela e pelo relatório em PDF)."""
     if not any(premissas.values()):
         texto = (
             "Mova as premissas acima para ver o efeito. Por enquanto, os valores simulados "
@@ -613,6 +614,13 @@ def _insight(premissas, original, simulado, ano):
             f"{'ganha' if dif_margem >= 0 else 'perde'} {_num(abs(dif_margem), 1)} p.p."
         )
         icone = "↗" if dif_resultado >= 0 else "↘"
+
+    return texto, icone
+
+
+def _insight(premissas, original, simulado, ano):
+    ressalva = f'<span class="sim-ressalva">{RESSALVA_SIMULACAO}</span>'
+    texto, icone = texto_simulacao(premissas, original, simulado, ano)
 
     st.markdown(
         f'<div class="sim-insight"><span class="sim-insight-icon">{icone}</span>'

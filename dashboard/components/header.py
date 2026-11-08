@@ -1,7 +1,7 @@
 import unicodedata
 import streamlit as st
 from components.auth import usuario_logado
-from relatorios import RELATORIOS, relatorio_da_pagina
+from relatorios import RELATORIOS, SEM_RELATORIO, relatorio_da_pagina
 
 
 BUSCA_POR_PAGINA = {
@@ -316,12 +316,18 @@ def _caixa_relatorio(pagina):
         relatorio = relatorio_da_pagina(pagina, st.session_state)
 
         if relatorio is None:
-            disponiveis = ", ".join(RELATORIOS)
-            st.info(
-                f"O relatório em PDF da página {pagina} ainda está em preparação. "
-                f"Já disponíveis: {disponiveis}.",
-                icon=":material/picture_as_pdf:",
-            )
+            if pagina in SEM_RELATORIO:
+                texto = (
+                    f"A página {pagina} não tem números para gerar um relatório. Os "
+                    "relatórios em PDF ficam nas páginas de análise, como Visão Geral, "
+                    "Indicadores e Insights."
+                )
+            else:
+                texto = (
+                    f"O relatório em PDF da página {pagina} ainda está em preparação. "
+                    f"Já disponíveis: {', '.join(RELATORIOS)}."
+                )
+            st.info(texto, icon=":material/picture_as_pdf:")
             return
 
         nome_arquivo, recorte, gerar = relatorio

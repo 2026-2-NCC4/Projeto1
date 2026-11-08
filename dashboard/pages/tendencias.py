@@ -546,6 +546,59 @@ def _kpi(coluna, titulo, valor, nota):
             st.caption(nota)
 
 
+def resumo_evolucao(resumo, variacoes, direcao):
+    """CAGR, maior variação, melhor e pior ano (usado pela tela e pelo PDF).
+
+    Devolve (cagr, maior_txt, melhor_txt, pior_txt); cagr pode ser NaN.
+    """
+    validos = resumo.dropna(
+        subset=["Media"]
+    )
+
+    cagr = np.nan
+
+    if len(validos) >= 2:
+
+        inicial = validos.iloc[0]["Media"]
+        final = validos.iloc[-1]["Media"]
+
+        if inicial > 0 and final > 0:
+
+            cagr = (
+                (final / inicial)
+                ** (1 / (len(validos) - 1))
+            ) - 1
+
+    vv = variacoes.dropna(
+        subset=["Variacao"]
+    )
+
+    if vv.empty:
+        return cagr, "—", "—", "—"
+
+    maior = vv.loc[
+        vv["Variacao"].abs().idxmax()
+    ]
+
+    melhor = vv.loc[
+        vv["Variacao"].idxmax()
+    ]
+
+    pior = vv.loc[
+        vv["Variacao"].idxmin()
+    ]
+
+    if direcao == "menor":
+        melhor, pior = pior, melhor
+
+    maior_txt = (
+        f"{maior['Variacao']:+.1%} "
+        f"· Ano {int(maior['Ano'])}"
+    )
+
+    return cagr, maior_txt, f"Ano {int(melhor['Ano'])}", f"Ano {int(pior['Ano'])}"
+
+
 def render_tendencias():
 
     st.markdown(
@@ -844,58 +897,9 @@ def render_tendencias():
                 )
 
 
-        validos = resumo.dropna(
-            subset=["Media"]
+        cagr, maior_txt, melhor_txt, pior_txt = resumo_evolucao(
+            resumo, variacoes, direcao
         )
-
-        cagr = np.nan
-
-        if len(validos) >= 2:
-
-            inicial = validos.iloc[0]["Media"]
-            final = validos.iloc[-1]["Media"]
-
-            if inicial > 0 and final > 0:
-
-                cagr = (
-                    (final / inicial)
-                    ** (1 / (len(validos) - 1))
-                ) - 1
-
-        vv = variacoes.dropna(
-            subset=["Variacao"]
-        )
-
-        if not vv.empty:
-
-            maior = vv.loc[
-                vv["Variacao"].abs().idxmax()
-            ]
-
-            melhor = vv.loc[
-                vv["Variacao"].idxmax()
-            ]
-
-            pior = vv.loc[
-                vv["Variacao"].idxmin()
-            ]
-
-            if direcao == "menor":
-                melhor, pior = pior, melhor
-
-            maior_txt = (
-                f"{maior['Variacao']:+.1%} "
-                f"· Ano {int(maior['Ano'])}"
-            )
-
-            melhor_txt = f"Ano {int(melhor['Ano'])}"
-            pior_txt = f"Ano {int(pior['Ano'])}"
-
-        else:
-
-            maior_txt = "—"
-            melhor_txt = "—"
-            pior_txt = "—"
 
         st.subheader("Resumo da evolução")
 

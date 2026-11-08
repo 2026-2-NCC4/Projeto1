@@ -593,6 +593,15 @@ def _tabela_todos_os_cenarios(dados_ano):
         )
 
 
+def cenarios_padrao(dados_ano):
+    """Na primeira visita, compara os dois cenários de maior EBITDA do ano."""
+    return (
+        dados_ano.dropna(subset=["EBITDA"])
+        .nlargest(2, "EBITDA")["Cenario"]
+        .tolist()
+    )
+
+
 def render_comparacao():
     st.markdown(PAGE_STYLE, unsafe_allow_html=True)
 
@@ -674,11 +683,7 @@ def render_comparacao():
         )
 
         if "comp_cenarios" not in st.session_state:
-            st.session_state["comp_cenarios"] = (
-                dados_ano.dropna(subset=["EBITDA"])
-                .nlargest(2, "EBITDA")["Cenario"]
-                .tolist()
-            )
+            st.session_state["comp_cenarios"] = cenarios_padrao(dados_ano)
 
         st.session_state["comp_cenarios"] = [
             cenario

@@ -106,8 +106,8 @@ class RelatorioPDF(FPDF):
         self.set_fill_color(*FUNDO)
         self.set_font("DejaVu", "", 9)
         self.set_text_color(*TEXTO)
-        self.multi_cell(0, 8, f"  Recorte do relatório  —  {texto}", fill=True,
-                        new_x=XPos.LMARGIN, new_y=YPos.NEXT)
+        self.multi_cell(0, 5.5, f"Recorte do relatório  —  {texto}", fill=True,
+                        padding=(2.5, 3), new_x=XPos.LMARGIN, new_y=YPos.NEXT)
         self.ln(4)
 
     # ---------- Blocos ----------
@@ -236,7 +236,7 @@ class RelatorioPDF(FPDF):
         largura_total = self.w - self.l_margin - self.r_margin
         espaco = 3
         largura = (largura_total - espaco * (por_linha - 1)) / por_linha
-        altura = 22
+        altura = 25
 
         for inicio in range(0, len(itens), por_linha):
             if self.get_y() + altura > self.h - 22:
@@ -247,27 +247,38 @@ class RelatorioPDF(FPDF):
                 self.set_fill_color(*FUNDO)
                 self.rect(x, y, largura, altura, style="F", round_corners=True, corner_radius=2)
 
+                util = largura - 6
+
                 self.set_xy(x + 3, y + 2.5)
-                self.set_font("DejaVu", "", 7.5)
                 self.set_text_color(*CINZA)
-                self.cell(largura - 6, 4, rotulo)
+                self.cell(util, 4, self._caber(rotulo, util, "", 7.5))
 
                 self.set_xy(x + 3, y + 7.5)
-                self.set_font("DejaVu", "B", 11.5 if len(valor) <= 14 else 9.5)
                 self.set_text_color(*AZUL)
-                self.cell(largura - 6, 6, valor)
+                self.cell(util, 6, self._caber(valor, util, "B", 11.5))
 
+                # a nota quebra em até duas linhas; se ainda não couber, termina com "…"
                 self.set_xy(x + 3, y + 15)
-                self.set_font("DejaVu", "", 7)
                 cor = VERDE if tom == "positivo" else LARANJA if tom == "negativo" else CINZA_CLARO
                 self.set_text_color(*cor)
-                self.cell(largura - 6, 4, nota)
+                self.set_font("DejaVu", "", 6.8)
+                linhas = self.multi_cell(util, 3.4, nota, dry_run=True, output="LINES")
+                if len(linhas) > 2:
+                    segunda = linhas[1]
+                    while segunda and self.get_string_width(segunda + "…") > util:
+                        segunda = segunda[:-1]
+                    linhas = [linhas[0], segunda.rstrip() + "…"]
+                self.multi_cell(util, 3.4, "\n".join(linhas))
             self.set_y(y + altura + espaco)
         self.ln(1)
 
     def tabela(self, cabecalho, linhas, larguras=None):
         self.set_font("DejaVu", "", 8.5)
+        self.set_text_color(*TEXTO)
         self.set_draw_color(*LINHA)
+        # a cor de fundo vale para as linhas zebradas; sem isso herdaria a do
+        # último bloco desenhado (ex.: o azul do destaque)
+        self.set_fill_color(246, 249, 253)
         with self.table(
             col_widths=larguras,
             headings_style=_estilo_cabecalho(),
@@ -313,6 +324,21 @@ class RelatorioPDF(FPDF):
         self.multi_cell(0, 4.5, texto, new_x=XPos.LMARGIN, new_y=YPos.NEXT)
         self.ln(1)
 
+    def _caber(self, texto, largura, estilo, tamanho, minimo=6):
+        """Ajusta a fonte para o texto caber na largura; no limite, corta com "…".
+
+        Deixa a fonte definida e devolve o texto a escrever.
+        """
+        while tamanho > minimo:
+            self.set_font("DejaVu", estilo, tamanho)
+            if self.get_string_width(texto) <= largura:
+                return texto
+            tamanho -= 0.5
+        self.set_font("DejaVu", estilo, minimo)
+        while texto and self.get_string_width(texto + "…") > largura:
+            texto = texto[:-1]
+        return texto.rstrip() + "…"
+
     def _altura_texto(self, texto, largura, tamanho, altura_linha):
         self.set_font("DejaVu", "", tamanho)
         linhas = self.multi_cell(largura, altura_linha, texto, dry_run=True, output="LINES")
@@ -355,6 +381,123 @@ def figura_linhas(series, titulo_eixo, formato_eixo=None):
         # legenda acima da área do gráfico, para não cobrir as linhas
         eixo.legend(fontsize=7.5, frameon=False, loc="lower left",
                     bbox_to_anchor=(0, 1.0), ncol=len(series))
+    figura.tight_layout()
+    return figura
+
+
+def _estilo_eixo(eixo):
+    eixo.tick_params(labelsize=7.5, colors="#55799F")
+    for lado in ("top", "right"):
+        eixo.spines[lado].set_visible(False)
+    for lado in ("left", "bottom"):
+        eixo.spines[lado].set_color("#C3D9F2")
+
+
+def figura_barras_horizontais(rotulos, valores, formatar, cores=None, altura_por_barra=0.32):
+    """Barras horizontais com o valor escrito ao lado (rankings, impactos)."""
+    altura = max(1.6, altura_por_barra * len(rotulos) + 0.6)
+    figura, eixo = plt.subplots(figsize=(7.4, altura))
+    posicoes = list(range(len(rotulos)))[::-1]  # o primeiro item fica no topo
+    cores = cores or ["#1677E8"] * len(rotulos)
+    eixo.barh(posicoes, valores, color=cores, height=0.62)
+    eixo.set_yticks(posicoes)
+    eixo.set_yticklabels(rotulos, fontsize=8, color="#102B50")
+    eixo.axvline(0, color="#C3D9F2", linewidth=0.8)
+
+    maximo = max((abs(v) for v in valores), default=1) or 1
+    for posicao, valor in zip(posicoes, valores):
+        deslocamento = maximo * 0.015 * (1 if valor >= 0 else -1)
+        eixo.text(valor + deslocamento, posicao, formatar(valor), va="center",
+                  ha="left" if valor >= 0 else "right", fontsize=7.5, color="#55799F")
+
+    # folga dos dois lados para os rótulos não serem cortados
+    menor, maior = min(0, min(valores)), max(0, max(valores))
+    folga = (maior - menor) * 0.22 or 1
+    eixo.set_xlim(menor - (folga if menor < 0 else 0), maior + folga)
+    eixo.set_xticks([])
+    _estilo_eixo(eixo)
+    eixo.spines["bottom"].set_visible(False)
+    figura.tight_layout()
+    return figura
+
+
+def figura_barras_agrupadas(categorias, series, titulo_eixo, formato_eixo=None, destaque=None):
+    """Barras lado a lado por categoria. series = {nome: lista de valores}."""
+    import numpy as np
+
+    figura, eixo = plt.subplots(figsize=(7.4, 2.9))
+    largura = 0.8 / len(series)
+    base = np.arange(len(categorias))
+    paleta = ["#B7D3EE", "#1677E8", "#58B99A", "#E7A23B", "#6D6AE8"]
+    for i, (nome, valores) in enumerate(series.items()):
+        if len(series) == 1:
+            # uma série só: azul para positivo, laranja para negativo
+            cor = ["#1677E8" if v >= 0 else "#E07B4A" for v in valores]
+        else:
+            cor = paleta[i % len(paleta)]
+        barras = eixo.bar(base + i * largura - 0.4 + largura / 2, valores, largura,
+                          label=nome, color=cor)
+        if destaque is not None:
+            for j, barra in enumerate(barras):
+                if categorias[j] != destaque:
+                    barra.set_alpha(0.6)
+    eixo.set_xticks(base)
+    eixo.set_xticklabels(categorias, fontsize=7.5)
+    eixo.set_ylabel(titulo_eixo, fontsize=8, color="#55799F")
+    if formato_eixo:
+        eixo.yaxis.set_major_formatter(matplotlib.ticker.FuncFormatter(formato_eixo))
+    eixo.grid(axis="y", color="#EAF0F6", linewidth=0.8)
+    eixo.set_axisbelow(True)
+    eixo.axhline(0, color="#C3D9F2", linewidth=0.8)
+    _estilo_eixo(eixo)
+    if len(series) > 1:
+        eixo.legend(fontsize=7.5, frameon=False, loc="lower left",
+                    bbox_to_anchor=(0, 1.0), ncol=len(series))
+    figura.tight_layout()
+    return figura
+
+
+def figura_dispersao(x, y, titulo_x, titulo_y, destaque=None, formato_eixo=None):
+    """Pontos com a linha de "previsão perfeita" (y = x) e um ponto em destaque."""
+    figura, eixo = plt.subplots(figsize=(5.6, 3.6))
+    eixo.scatter(x, y, s=8, alpha=0.45, color="#4A90D9", linewidths=0)
+    menor, maior = float(min(min(x), min(y))), float(max(max(x), max(y)))
+    eixo.plot([menor, maior], [menor, maior], color="#3E9C7A", linewidth=1.3)
+    if destaque is not None:
+        eixo.scatter([destaque[0]], [destaque[1]], s=60, color="#F59E0B",
+                     edgecolors="white", linewidths=1.5, zorder=3)
+    eixo.set_xlabel(titulo_x, fontsize=8, color="#55799F")
+    eixo.set_ylabel(titulo_y, fontsize=8, color="#55799F")
+    if formato_eixo:
+        formatador = matplotlib.ticker.FuncFormatter(formato_eixo)
+        eixo.xaxis.set_major_formatter(formatador)
+        eixo.yaxis.set_major_formatter(formatador)
+    eixo.grid(color="#EAF0F6", linewidth=0.8)
+    eixo.set_axisbelow(True)
+    _estilo_eixo(eixo)
+    figura.tight_layout()
+    return figura
+
+
+def figura_faixa(anos, media, p10, p90, destaque, nome_destaque, titulo_eixo, formato_eixo=None):
+    """Média dos cenários, faixa P10–P90 sombreada e um cenário em destaque."""
+    figura, eixo = plt.subplots(figsize=(7.4, 3.0))
+    eixo.fill_between(anos, p10, p90, color="#1677E8", alpha=0.12, linewidth=0,
+                      label="Faixa P10–P90")
+    eixo.plot(anos, media, color="#1677E8", linewidth=2, marker="o", markersize=3.5,
+              label="Média dos cenários")
+    if destaque is not None and len(destaque):
+        eixo.plot(destaque.index, destaque.values, color="#F59E0B", linewidth=2,
+                  marker="o", markersize=3.5, label=nome_destaque)
+    eixo.set_xticks(list(anos))
+    eixo.set_xlabel("Ano", fontsize=8, color="#55799F")
+    eixo.set_ylabel(titulo_eixo, fontsize=8, color="#55799F")
+    if formato_eixo:
+        eixo.yaxis.set_major_formatter(matplotlib.ticker.FuncFormatter(formato_eixo))
+    eixo.grid(axis="y", color="#EAF0F6", linewidth=0.8)
+    eixo.set_axisbelow(True)
+    _estilo_eixo(eixo)
+    eixo.legend(fontsize=7.5, frameon=False, loc="lower left", bbox_to_anchor=(0, 1.0), ncol=3)
     figura.tight_layout()
     return figura
 

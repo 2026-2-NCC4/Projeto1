@@ -188,6 +188,53 @@ def _grafico_ranking(dados, titulo, indicador, formato, chave, cor, ordem):
         st.altair_chart(grafico, use_container_width=True)
 
 
+def calcular_ranking(df, ano, indicador):
+    """Cenários ordenados pelo indicador no ano (usado pela tela e pelo PDF).
+
+    Devolve (dados, formato). dados tem Valor (já na unidade de exibição),
+    Cenário e Posição; fica vazio se não houver valores.
+    """
+    dados_ano = df.loc[
+        df["Ano_Numero"].eq(ano),
+        ["Cenario", indicador],
+    ].copy()
+
+    dados_ano[indicador] = pd.to_numeric(
+        dados_ano[indicador],
+        errors="coerce",
+    )
+
+    dados_ano = (
+        dados_ano.dropna()
+        .groupby("Cenario", as_index=False)[indicador]
+        .mean()
+        .sort_values(indicador, ascending=False)
+        .reset_index(drop=True)
+    )
+
+    formato = INDICADORES[indicador]["formato"]
+
+    if dados_ano.empty:
+        return dados_ano, formato
+
+    if formato == "moeda":
+        fator = 1 / 1_000_000
+    elif formato == "percentual":
+        fator = 100
+    else:
+        fator = 1
+
+    dados_ano["Valor"] = dados_ano[indicador] * fator
+    dados_ano["Cenário"] = dados_ano["Cenario"].map(_rotulo_cenario)
+    dados_ano["Posição"] = range(1, len(dados_ano) + 1)
+
+    return dados_ano, formato
+
+
+def indicador_padrao(indicadores_disponiveis):
+    return "EBITDA" if "EBITDA" in indicadores_disponiveis else indicadores_disponiveis[0]
+
+
 def render_ranking():
     st.markdown(PAGE_STYLE, unsafe_allow_html=True)
 
@@ -245,8 +292,9 @@ def render_ranking():
                 indicador = st.selectbox(
                     "Indicador",
                     options=indicadores_disponiveis,
-                    index=indicadores_disponiveis.index("EBITDA")
-                    if "EBITDA" in indicadores_disponiveis else 0,
+                    index=indicadores_disponiveis.index(
+                        indicador_padrao(indicadores_disponiveis)
+                    ),
                     key="rank_indicador",
                 )
 
@@ -260,42 +308,13 @@ def render_ranking():
                     st.session_state.pagina_atual = "Simular novo cenário"
                     st.rerun()
 
-        dados_ano = df.loc[
-            df["Ano_Numero"].eq(ano),
-            ["Cenario", indicador],
-        ].copy()
-
-        dados_ano[indicador] = pd.to_numeric(
-            dados_ano[indicador],
-            errors="coerce",
-        )
-
-        dados_ano = (
-            dados_ano.dropna()
-            .groupby("Cenario", as_index=False)[indicador]
-            .mean()
-            .sort_values(indicador, ascending=False)
-            .reset_index(drop=True)
-        )
+        dados_ano, formato = calcular_ranking(df, ano, indicador)
 
         if dados_ano.empty:
             st.warning(
                 f"Não há valores de {indicador} disponíveis para o ano {ano}."
             )
             return
-
-        formato = INDICADORES[indicador]["formato"]
-
-        if formato == "moeda":
-            fator = 1 / 1_000_000
-        elif formato == "percentual":
-            fator = 100
-        else:
-            fator = 1
-
-        dados_ano["Valor"] = dados_ano[indicador] * fator
-        dados_ano["Cenário"] = dados_ano["Cenario"].map(_rotulo_cenario)
-        dados_ano["Posição"] = range(1, len(dados_ano) + 1)
 
         maior = dados_ano.iloc[0]
         menor = dados_ano.iloc[-1]
