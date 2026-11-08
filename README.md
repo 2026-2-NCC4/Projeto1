@@ -24,6 +24,15 @@ O projeto consiste no desenvolvimento de uma Plataforma Analítica de Planejamen
 A plataforma também disponibiliza relatórios gerenciais e um dashboard interativo, com no mínimo cinco indicadores, filtros e visualizações. Dessa forma, os usuários podem acompanhar KPIs, analisar relações entre variáveis, avaliar cenários e realizar análises de sensibilidade, apoiando decisões estratégicas e operacionais com base nos dados.
 <br><br>
 
+## 🚀 Acesse o dashboard
+
+<p align="center">
+  <a href="https://ctianalytics.streamlit.app/"><b>👉 ctianalytics.streamlit.app</b></a>
+</p>
+
+O dashboard está publicado e pode ser usado direto no navegador, sem instalar nada: <https://ctianalytics.streamlit.app/>. Para rodá-lo no seu computador, veja [Executar o dashboard](#4-executar-o-dashboard).
+<br><br>
+
 ## 🛠 Estrutura de pastas
 
 <pre>
@@ -109,6 +118,8 @@ Execute os notebooks da pasta `notebooks` **nesta ordem**, pois cada um usa arqu
 > ⚠️ Os notebooks usam caminhos relativos (ex.: `../data/raw/...`), então devem ser executados de dentro da pasta `notebooks`, sem mover os arquivos de lugar.
 
 ### 4. Executar o dashboard
+
+> 🌐 Para só usar o dashboard, não é preciso instalar nada: acesse a versão publicada em <https://ctianalytics.streamlit.app/>. Os passos abaixo servem para rodá-lo no seu computador.
 
 As bibliotecas do dashboard estão listadas em `dashboard/requirements.txt`. De dentro da pasta `dashboard`, instale tudo de uma vez (só na primeira vez ou quando a lista mudar):
 
