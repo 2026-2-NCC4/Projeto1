@@ -86,10 +86,59 @@ PAGE_STYLE = """
     transition: all 0.2s ease;
 }
 .ind-insight:hover {
-    border-color: #B9D2E8;
-    border-left-color: #004B85;
     box-shadow: 0 6px 18px rgba(23, 59, 99, 0.10);
     transform: translateY(-2px);
+}
+.ind-insight-head {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+.ind-badge {
+    width: 26px;
+    height: 26px;
+    min-width: 26px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 14px;
+    font-weight: 800;
+    line-height: 1;
+}
+.ind-badge--sm {
+    width: 18px;
+    height: 18px;
+    min-width: 18px;
+    font-size: 11px;
+}
+.ind-insight--positivo { border-left-color: #2E9E6B; }
+.ind-insight--atencao  { border-left-color: #E0A100; }
+.ind-insight--negativo { border-left-color: #D64545; }
+.ind-insight--neutro   { border-left-color: #2585C5; }
+
+.ind-badge--positivo { background: #E6F6EE; color: #1F7A4F; }
+.ind-badge--atencao  { background: #FFF6DD; color: #9A6B00; }
+.ind-badge--negativo { background: #FDECEC; color: #B02A2A; }
+.ind-badge--neutro   { background: #E8F2FA; color: #1B6AA0; }
+
+.ind-legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-bottom: 14px;
+}
+.ind-legend-item {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    background: #FFFFFF;
+    border: 1px solid #E3ECF5;
+    border-radius: 999px;
+    padding: 5px 12px 5px 6px;
+    color: #4A5E75;
+    font-size: 12.5px;
+    font-weight: 600;
 }
 .ind-insight--wide {
     grid-column: 1 / -1;
@@ -395,14 +444,70 @@ def _card(coluna, titulo, valor, observacao):
         )
 
 
-def _html_insight(titulo, texto, largo=False):
-    classe = "ind-insight ind-insight--wide" if largo else "ind-insight"
+ICONES_STATUS = {
+    "positivo": "✓",
+    "atencao": "!",
+    "negativo": "✕",
+    "neutro": "i",
+}
+
+ROTULOS_STATUS = {
+    "positivo": ("favorável", "favoráveis"),
+    "atencao": ("atenção", "atenção"),
+    "negativo": ("crítico", "críticos"),
+    "neutro": ("informativo", "informativos"),
+}
+
+
+def _sinal(valor):
+    if valor > 0:
+        return "positivo"
+    if valor < 0:
+        return "negativo"
+    return "neutro"
+
+
+def _html_insight(titulo, texto, status="neutro", largo=False):
+    classe = f"ind-insight ind-insight--{status}"
+    if largo:
+        classe += " ind-insight--wide"
+
     return (
         f'<div class="{classe}">'
-        f'<div class="ind-insight-title">{titulo}</div>'
+        f'<div class="ind-insight-head">'
+        f'<span class="ind-badge ind-badge--{status}">{ICONES_STATUS[status]}</span>'
+        f'<span class="ind-insight-title">{titulo}</span>'
+        f'</div>'
         f'<div class="ind-insight-text">{texto}</div>'
         f'</div>'
     )
+
+
+def _html_legenda(itens):
+    contagem = {status: 0 for status in ROTULOS_STATUS}
+
+    for item in itens:
+        contagem[item[2]] += 1
+
+    chips = []
+
+    for status, (singular, plural) in ROTULOS_STATUS.items():
+        quantidade = contagem[status]
+
+        if quantidade == 0:
+            continue
+
+        rotulo = singular if quantidade == 1 else plural
+
+        chips.append(
+            f'<span class="ind-legend-item">'
+            f'<span class="ind-badge ind-badge--sm ind-badge--{status}">'
+            f'{ICONES_STATUS[status]}</span>'
+            f'{quantidade} {rotulo}'
+            f'</span>'
+        )
+
+    return f'<div class="ind-legend">{"".join(chips)}</div>'
 
 
 def _grade_insights(esquerda=(), direita=(), abaixo=()):
@@ -417,11 +522,13 @@ def _grade_insights(esquerda=(), direita=(), abaixo=()):
                 cards.append(_html_insight(*item))
 
     # os cards de comparação ocupam a linha inteira
-    for titulo, texto in abaixo:
-        cards.append(_html_insight(titulo, texto, largo=True))
+    for titulo, texto, status in abaixo:
+        cards.append(_html_insight(titulo, texto, status, largo=True))
+
+    legenda = _html_legenda([*esquerda, *direita, *abaixo])
 
     st.markdown(
-        f'<div class="ind-insight-grid">{"".join(cards)}</div>',
+        f'{legenda}<div class="ind-insight-grid">{"".join(cards)}</div>',
         unsafe_allow_html=True
     )
 
@@ -451,18 +558,23 @@ def _mapear_cenarios(df):
 
     return mapa
 
+
 def _gerar_insights(df_ano, df_anterior=None, cenario_selecionado=None):
     if df_ano.empty:
         st.info("Não há dados disponíveis para gerar insights.")
         return
 
-    l = leituras_desempenho(df_ano, df_anterior, cenario_selecionado)
+    l = leituras_desempenho(
+        df_ano, df_anterior, cenario_selecionado, com_status=True
+    )
     _grade_insights(l["esquerda"], l["direita"], l["abaixo"])
 
-def leituras_desempenho(df_ano, df_anterior=None, cenario_selecionado=None):
+
+def leituras_desempenho(df_ano, df_anterior=None, cenario_selecionado=None, com_status=False):
     """Leituras automáticas de desempenho (usadas pela tela e pelo relatório em PDF).
 
     Devolve {"esquerda", "direita", "abaixo"}: listas de (título, texto).
+    Com com_status=True, cada item vem como (título, texto, status).
     """
     esquerda, direita, abaixo = [], [], []
 
@@ -505,7 +617,8 @@ def leituras_desempenho(df_ano, df_anterior=None, cenario_selecionado=None):
     if ebitda is not None and pd.notna(ebitda):
         esquerda.append((
             "Resultado operacional",
-            f"A média do EBITDA foi de {_moeda(ebitda)} {contexto}."
+            f"A média do EBITDA foi de {_moeda(ebitda)} {contexto}.",
+            "neutro"
         ))
 
     if margem is not None and pd.notna(margem):
@@ -514,28 +627,33 @@ def leituras_desempenho(df_ano, df_anterior=None, cenario_selecionado=None):
             f"A margem EBITDA média foi de "
             f"{_percentual(margem, df_ano['Margem EBITDA'])}, "
             "indicando a participação do resultado operacional "
-            "em relação à receita."
+            "em relação à receita.",
+            _sinal(margem)
         ))
 
     if margem_liquida is not None and pd.notna(margem_liquida):
         direita.append((
             "Margem líquida",
             f"A margem líquida média foi de "
-            f"{_percentual(margem_liquida, df_ano['Margem Líquida'])}."
+            f"{_percentual(margem_liquida, df_ano['Margem Líquida'])}.",
+            _sinal(margem_liquida)
         ))
 
     if lc is not None and pd.notna(lc):
         if lc > 1:
+            status = "positivo"
             interpretacao = (
                 "a média está acima de 1, indicando maior cobertura "
                 "das obrigações de curto prazo pelos ativos circulantes."
             )
         elif lc < 1:
+            status = "negativo"
             interpretacao = (
                 "a média está abaixo de 1, indicando que os ativos "
                 "circulantes são inferiores às obrigações de curto prazo."
             )
         else:
+            status = "atencao"
             interpretacao = (
                 "a média está em 1, indicando equilíbrio entre "
                 "ativos e obrigações de curto prazo."
@@ -543,7 +661,8 @@ def leituras_desempenho(df_ano, df_anterior=None, cenario_selecionado=None):
 
         direita.append((
             "Liquidez corrente",
-            f"A liquidez corrente média foi de {_numero(lc)}; {interpretacao}"
+            f"A liquidez corrente média foi de {_numero(lc)}; {interpretacao}",
+            status
         ))
 
 
@@ -559,16 +678,19 @@ def leituras_desempenho(df_ano, df_anterior=None, cenario_selecionado=None):
             proporcao = (acima / total) * 100
 
             if roic > wacc:
+                status = "positivo"
                 leitura = (
                     "Na média, o retorno sobre o capital investido "
                     "superou o custo de capital."
                 )
             elif roic < wacc:
+                status = "negativo"
                 leitura = (
                     "Na média, o retorno sobre o capital investido "
                     "ficou abaixo do custo de capital."
                 )
             else:
+                status = "atencao"
                 leitura = (
                     "Na média, o retorno sobre o capital investido "
                     "ficou igual ao custo de capital."
@@ -577,7 +699,8 @@ def leituras_desempenho(df_ano, df_anterior=None, cenario_selecionado=None):
             abaixo.append((
                 "Retorno sobre o capital x custo de capital",
                 f"{leitura} Em {proporcao:.1f}% dos registros com dados "
-                "disponíveis, o ROIC ficou acima do WACC."
+                "disponíveis, o ROIC ficou acima do WACC.",
+                status
             ))
 
 
@@ -611,7 +734,7 @@ def leituras_desempenho(df_ano, df_anterior=None, cenario_selecionado=None):
                         "ao ano anterior."
                     )
 
-                abaixo.append(("Evolução do EBITDA", texto))
+                abaixo.append(("Evolução do EBITDA", texto, _sinal(variacao)))
 
         if (
             "Margem EBITDA" in df_ano.columns
@@ -632,7 +755,8 @@ def leituras_desempenho(df_ano, df_anterior=None, cenario_selecionado=None):
                     "Variação da margem EBITDA",
                     f"A diferença entre a margem EBITDA média do ano selecionado "
                     f"e a do ano anterior foi de {_numero(diferenca)} "
-                    "ponto(s) na escala original dos dados."
+                    "ponto(s) na escala original dos dados.",
+                    _sinal(diferenca)
                 ))
 
 
@@ -658,10 +782,16 @@ def leituras_desempenho(df_ano, df_anterior=None, cenario_selecionado=None):
                 f"{mapa.get(melhor, melhor)} apresentou o maior EBITDA médio "
                 f"({_moeda(ranking.iloc[0])}). "
                 f"{mapa.get(pior, pior)} apresentou o menor "
-                f"({_moeda(ranking.iloc[-1])})."
+                f"({_moeda(ranking.iloc[-1])}).",
+                "neutro"
             ))
 
-    return {"esquerda": esquerda, "direita": direita, "abaixo": abaixo}
+    saida = {"esquerda": esquerda, "direita": direita, "abaixo": abaixo}
+
+    if not com_status:
+        saida = {k: [(t, x) for t, x, _ in v] for k, v in saida.items()}
+
+    return saida
 
 
 def _valor_central(df, coluna):
@@ -672,8 +802,11 @@ def _valor_central(df, coluna):
 
     return float(valores.median()) if not valores.empty else None
 
+
 def _gerar_insights_novos(df_ano, cenario_selecionado):
-    esquerda, direita = leituras_estrutura(df_ano, cenario_selecionado)
+    esquerda, direita = leituras_estrutura(
+        df_ano, cenario_selecionado, com_status=True
+    )
 
     if not esquerda and not direita:
         st.info(
@@ -685,10 +818,11 @@ def _gerar_insights_novos(df_ano, cenario_selecionado):
     _grade_insights(esquerda, direita)
 
 
-def leituras_estrutura(df_ano, cenario_selecionado):
+def leituras_estrutura(df_ano, cenario_selecionado, com_status=False):
     """Leituras de retorno, capital de giro e caixa (tela e relatório em PDF).
 
     Devolve (esquerda, direita): listas de (título, texto).
+    Com com_status=True, cada item vem como (título, texto, status).
     """
     if cenario_selecionado == "Todos":
         referencia = "mediana dos cenários"
@@ -715,20 +849,26 @@ def leituras_estrutura(df_ano, cenario_selecionado):
 
     if roe is not None:
         texto = f"O ROE ({referencia}) foi de {_percentual(roe)}."
+        status = "neutro"
 
         if roic is not None:
             if roe > roic:
+                status = "positivo"
                 texto += (
                     f" Ficou acima do ROIC ({_percentual(roic)}): o retorno "
                     "ao acionista superou o retorno do capital investido."
                 )
             else:
+                status = "atencao"
                 texto += (
                     f" Ficou abaixo do ROIC ({_percentual(roic)}): o retorno "
                     "ao acionista não superou o do capital investido."
                 )
 
-        esquerda.append(("Retorno sobre o patrimônio líquido", texto))
+        if roe < 0:
+            status = "negativo"
+
+        esquerda.append(("Retorno sobre o patrimônio líquido", texto, status))
 
     if None not in (margem, giro, alavancagem):
         esquerda.append((
@@ -737,7 +877,8 @@ def leituras_estrutura(df_ano, cenario_selecionado):
             f"giro do ativo de {_numero(giro)}x e alavancagem de "
             f"{_numero(alavancagem)}x. A margem mostra a eficiência, o giro "
             "mostra o uso dos ativos e a alavancagem mostra o peso do capital "
-            "de terceiros."
+            "de terceiros.",
+            "neutro"
         ))
 
     if fco_ebitda is not None:
@@ -754,7 +895,11 @@ def leituras_estrutura(df_ano, cenario_selecionado):
         else:
             texto += ". Parte do resultado operacional não virou caixa no período."
 
-        esquerda.append(("Conversão do EBITDA em caixa", texto))
+        esquerda.append((
+            "Conversão do EBITDA em caixa",
+            texto,
+            "positivo" if fco_ebitda >= 1 else "atencao"
+        ))
 
     if cobertura_juros is not None:
         if cobertura_juros >= 1:
@@ -765,7 +910,8 @@ def leituras_estrutura(df_ano, cenario_selecionado):
         esquerda.append((
             "Cobertura de juros",
             f"O FCO cobre {_numero(cobertura_juros)}x as despesas "
-            f"financeiras. {leitura}"
+            f"financeiras. {leitura}",
+            "positivo" if cobertura_juros >= 1 else "negativo"
         ))
 
     if ciclo is not None:
@@ -788,7 +934,11 @@ def leituras_estrutura(df_ano, cenario_selecionado):
                 "financiar a operação."
             )
 
-        direita.append(("Capital de giro e prazos", texto))
+        direita.append((
+            "Capital de giro e prazos",
+            texto,
+            "atencao" if ciclo > 0 else "positivo"
+        ))
 
     if ccl is not None:
         if ccl >= 0:
@@ -798,7 +948,8 @@ def leituras_estrutura(df_ano, cenario_selecionado):
 
         direita.append((
             "Capital circulante líquido",
-            f"O CCL foi de {_moeda(ccl)}. {leitura}"
+            f"O CCL foi de {_moeda(ccl)}. {leitura}",
+            "positivo" if ccl >= 0 else "negativo"
         ))
 
     if fcl is not None:
@@ -809,7 +960,8 @@ def leituras_estrutura(df_ano, cenario_selecionado):
 
         direita.append((
             "Fluxo de caixa livre",
-            f"O FCL foi de {_moeda(fcl)}. {leitura}"
+            f"O FCL foi de {_moeda(fcl)}. {leitura}",
+            "positivo" if fcl >= 0 else "negativo"
         ))
 
     if cobertura_dividendos is not None:
@@ -821,8 +973,13 @@ def leituras_estrutura(df_ano, cenario_selecionado):
         direita.append((
             "Cobertura de dividendos",
             f"O FCL cobre {_numero(cobertura_dividendos)}x a distribuição "
-            f"de caixa. {leitura}"
+            f"de caixa. {leitura}",
+            "positivo" if cobertura_dividendos >= 1 else "atencao"
         ))
+
+    if not com_status:
+        esquerda = [(t, x) for t, x, _ in esquerda]
+        direita = [(t, x) for t, x, _ in direita]
 
     return esquerda, direita
 
@@ -1184,8 +1341,6 @@ def render_indicadores():
         como_interpretar(
             "ind",
             [
-                "**Resumo do ano:** média dos valores do recorte escolhido. Em "
-                "\"Todos\", é a média dos cenários; em um cenário, é o valor dele.",
                 "**Insights:** leituras automáticas. As dos novos indicadores usam "
                 "a mediana, para que cenários extremos não distorçam o resultado.",
                 "**ROE e DuPont:** o ROE é o lucro líquido sobre o patrimônio "
