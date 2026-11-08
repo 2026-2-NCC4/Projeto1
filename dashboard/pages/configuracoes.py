@@ -5,6 +5,7 @@ import streamlit as st
 
 from components.auth import sair, usuario_logado
 from components.sidebar import GRUPOS
+from data.envio_email import avisar_senha_alterada
 from data.usuarios import (
     ErroCadastro,
     alterar_senha,
@@ -242,6 +243,7 @@ def _seguranca(usuario):
             except ErroCadastro as erro:
                 st.error(str(erro))
             else:
+                avisar_senha_alterada(usuario["email"], usuario["nome"])
                 st.success("Senha alterada. Use a nova senha no próximo acesso.")
 
 

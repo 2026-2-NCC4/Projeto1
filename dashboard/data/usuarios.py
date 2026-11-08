@@ -248,7 +248,20 @@ def gerar_codigo_redefinicao(email):
     return usuario["nome"], codigo
 
 
+def cancelar_codigo_redefinicao(email):
+    """Apaga o código pendente (ex.: o e-mail não pôde ser enviado).
+
+    Sem isso, o intervalo mínimo entre pedidos bloquearia uma nova tentativa
+    logo em seguida, e a pessoa ficaria esperando um e-mail que nunca saiu.
+    """
+    with _conectar() as conexao:
+        conexao.execute(
+            "DELETE FROM redefinicoes_senha WHERE email = ?", (normalizar_email(email),)
+        )
+
+
 def redefinir_senha(email, codigo, senha, confirmar):
+    """Troca a senha se o código for válido e devolve (id, nome, email)."""
     email = normalizar_email(email)
     codigo = codigo.strip()
 
@@ -291,6 +304,12 @@ def redefinir_senha(email, codigo, senha, confirmar):
             (email,),
         )
         conexao.execute("DELETE FROM redefinicoes_senha WHERE email = ?", (email,))
+        usuario = conexao.execute(
+            "SELECT id, nome, email FROM usuarios WHERE email = ?", (email,)
+        ).fetchone()
+
+    # Dados públicos, para o aviso de "senha alterada" por e-mail
+    return dict(usuario)
 
 
 def obter_usuario(usuario_id):

@@ -7,12 +7,19 @@ import streamlit as st
 import streamlit.components.v1 as components
 
 from components.carousel import render_carousel
-from data.envio_email import configuracao_smtp, enviar_codigo_redefinicao
+from data.envio_email import (
+    ErroEnvio,
+    avisar_senha_alterada,
+    configuracao_smtp,
+    enviar_codigo_redefinicao,
+    modo_teste,
+)
 from data.usuarios import (
     VALIDADE_CODIGO_MINUTOS,
     ErroCadastro,
     autenticar,
     cadastrar_usuario,
+    cancelar_codigo_redefinicao,
     criar_sessao_persistente,
     encerrar_sessao_persistente,
     gerar_codigo_redefinicao,
@@ -275,9 +282,13 @@ PAGE_STYLE = """
 
 def _token_do_cookie():
     try:
-        return st.context.cookies.get(NOME_COOKIE)
+        token = st.context.cookies.get(NOME_COOKIE)
     except Exception:
         return None
+
+    # Só aceita texto: fora do navegador (ex.: testes) o cookie pode vir em
+    # outro formato e quebraria o cálculo do hash
+    return token if isinstance(token, str) and token else None
 
 
 def _aplicar_preferencias(usuario):
@@ -484,20 +495,35 @@ def _voltar_ao_login(aviso=None):
 
 
 def _solicitar_codigo(email):
+    """Gera o código e envia por e-mail.
+
+    Sem SMTP configurado, a recuperação fica indisponível — a não ser no modo
+    de teste ([auth] modo_teste = true), em que o código aparece na tela.
+    """
+    envio_configurado = configuracao_smtp() is not None
+
+    if not envio_configurado and not modo_teste():
+        st.error(
+            "A recuperação de senha está indisponível no momento: o envio de e-mail "
+            "ainda não foi configurado. Fale com o administrador da plataforma."
+        )
+        return False
+
     resultado = gerar_codigo_redefinicao(email)
 
     if resultado:
         nome, codigo = resultado
         st.session_state.pop("redef_codigo_teste", None)
 
-        if configuracao_smtp() is None:
-            st.session_state.redef_codigo_teste = codigo
-        else:
+        if envio_configurado:
             try:
                 enviar_codigo_redefinicao(email, nome, codigo, VALIDADE_CODIGO_MINUTOS)
-            except Exception:
-                st.error("Não foi possível enviar o e-mail agora. Tente novamente em instantes.")
+            except ErroEnvio as erro:
+                cancelar_codigo_redefinicao(email)
+                st.error(f"{erro} Tente novamente em instantes.")
                 return False
+        else:
+            st.session_state.redef_codigo_teste = codigo
 
     st.session_state.redef_email = normalizar_email(email)
     return True
@@ -540,9 +566,9 @@ def _render_esqueci_codigo():
     codigo_teste = st.session_state.get("redef_codigo_teste")
     if codigo_teste:
         st.warning(
-            f"Modo de teste: o envio de e-mail não está configurado, por isso "
-            f"o código aparece aqui: **{codigo_teste}**. Configure o SMTP em "
-            "`.streamlit/secrets.toml` antes de publicar a plataforma."
+            f"Modo de teste: o código aparece aqui porque o envio de e-mail não está "
+            f"configurado: **{codigo_teste}**. Desative o modo de teste e configure o "
+            "SMTP em `.streamlit/secrets.toml` antes de publicar a plataforma."
         )
 
     with st.form("reset_form"):
@@ -557,10 +583,11 @@ def _render_esqueci_codigo():
 
     if redefinir:
         try:
-            redefinir_senha(email, codigo, senha, confirmar)
+            usuario = redefinir_senha(email, codigo, senha, confirmar)
         except ErroCadastro as erro:
             st.error(str(erro))
         else:
+            avisar_senha_alterada(usuario["email"], usuario["nome"])
             _voltar_ao_login("Senha redefinida. Entre com a nova senha.")
 
     if st.button("Reenviar código", key="reset_resend", type="tertiary"):
