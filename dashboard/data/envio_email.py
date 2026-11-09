@@ -9,8 +9,7 @@ import streamlit as st
 
 logger = logging.getLogger(__name__)
 
-# As credenciais ficam em .streamlit/secrets.toml (fora do git), na seção [smtp].
-# Veja o passo a passo em .streamlit/secrets.example.toml.
+
 CAMPOS_OBRIGATORIOS = ("servidor", "porta")
 SEGURANCAS = ("starttls", "ssl", "nenhuma")
 TIMEOUT_SEGUNDOS = 15
@@ -22,8 +21,6 @@ class ErroEnvio(RuntimeError):
     """Falha ao enviar e-mail; a mensagem é segura para mostrar ao usuário."""
 
 
-# ---------- Configuração ----------
-
 def _secao(nome):
     try:
         return dict(st.secrets[nome])
@@ -32,11 +29,6 @@ def _secao(nome):
 
 
 def configuracao_smtp(config=None):
-    """Configuração do SMTP pronta para uso, ou None se não estiver configurado.
-
-    `config` permite passar a seção [smtp] diretamente (usado pelo
-    testar_email.py, que roda fora do Streamlit).
-    """
     config = dict(config) if config is not None else _secao("smtp")
 
     if not all(config.get(campo) for campo in CAMPOS_OBRIGATORIOS):
@@ -48,7 +40,6 @@ def configuracao_smtp(config=None):
     if seguranca not in SEGURANCAS:
         seguranca = "starttls"
 
-    # Usuário e senha só são dispensáveis num servidor local de testes
     if seguranca != "nenhuma" and not (config.get("usuario") and config.get("senha")):
         return None
 
@@ -64,15 +55,9 @@ def configuracao_smtp(config=None):
 
 
 def modo_teste():
-    """Com [auth] modo_teste = true e sem SMTP, o código aparece na tela.
-
-    Só para desenvolvimento: em produção qualquer pessoa poderia trocar a
-    senha de outra sabendo apenas o e-mail dela.
-    """
     return bool(_secao("auth").get("modo_teste", False))
 
 
-# ---------- Envio ----------
 
 def _modelo_html(titulo, paragrafos, destaque=None, observacao=""):
     corpo = "".join(
