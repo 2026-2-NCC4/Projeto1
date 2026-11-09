@@ -27,7 +27,7 @@ A plataforma também disponibiliza relatórios gerenciais e um dashboard interat
 ## 🚀 Acesse o dashboard
 
 <p align="center">
-  <a href="https://ctianalytics.streamlit.app/"><b>👉 ctianalytics.streamlit.app</b></a>
+  <a href="https://ctianalytics.streamlit.app/"><b> ctianalytics.streamlit.app</b></a>
 </p>
 
 O dashboard está publicado e pode ser usado direto no navegador, sem instalar nada: <https://ctianalytics.streamlit.app/>. Para rodá-lo no seu computador, veja [Executar o dashboard](#4-executar-o-dashboard).
