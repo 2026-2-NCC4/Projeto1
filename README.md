@@ -24,7 +24,7 @@ O projeto consiste no desenvolvimento de uma Plataforma Analítica de Planejamen
 A plataforma também disponibiliza relatórios gerenciais e um dashboard interativo, com no mínimo cinco indicadores, filtros e visualizações. Dessa forma, os usuários podem acompanhar KPIs, analisar relações entre variáveis, avaliar cenários e realizar análises de sensibilidade, apoiando decisões estratégicas e operacionais com base nos dados.
 <br><br>
 
-## 🚀 Acesse o dashboard
+## 🚀 Acesso ao dashboard
 
 <p align="center">
   <a href="https://ctianalytics.streamlit.app/"><b> ctianalytics.streamlit.app</b></a>
