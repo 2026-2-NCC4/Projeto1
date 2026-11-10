@@ -1,17 +1,16 @@
-📋 Engenharia de Requisitos e Métodos Ágeis
+📋 Design de Software e Diagramas UML
 
 📖 Descrição
 
-Esta entrega apresenta a aplicação da Engenharia de Requisitos e dos Métodos Ágeis no projeto CTI Analytics.
+Esta entrega apresenta a aplicação do design de software, da arquitetura em camadas e da modelagem por diagramas UML no projeto CTI Analytics.
 
 📌 Atividades realizadas
 
-* Documentação dos requisitos funcionais e não funcionais;
-* Definição das regras de negócio e critérios;
-* Organização das atividades utilizando Scrumban;
-* Acompanhamento das tarefas pelo GitHub Projects;
-* Aplicação dos requisitos à primeira entrega;
-* Registro dos resultados, observações e próximos passos.
+- Organização da arquitetura modular em três camadas (Dados, Processamento e Apresentação);
+- Definição das decisões de design e isolamento das regras financeiras;
+- Elaboração e integração de cinco diagramas UML (Componentes, Casos de Uso, Atividades, entre outros);
+- Alinhamento entre os requisitos da primeira entrega e a estrutura efetivamente construída;
+- Registro dos resultados, observações reflexivas e aprendizados do grupo.
 
 📦 Entrega
 
